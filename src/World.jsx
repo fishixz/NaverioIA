@@ -1051,15 +1051,33 @@ function SceneFallback({ onReady }) {
   );
 }
 
+function browserHasWebGL() {
+  if (typeof document === 'undefined') return true;
+  try {
+    const canvas = document.createElement('canvas');
+    return Boolean(canvas.getContext('webgl2') || canvas.getContext('webgl') || canvas.getContext('experimental-webgl'));
+  } catch {
+    return false;
+  }
+}
+
 export default function World({ onReady }) {
+  const [webglAvailable, setWebglAvailable] = useState(null);
   const [destination, setDestination] = useState(null);
   const destinationId = useRef(0);
+
+  useEffect(() => {
+    setWebglAvailable(browserHasWebGL());
+  }, []);
 
   const selectDestination = useCallback((x, z, kind = 'street') => {
     const next = safeDestination(x, z);
     destinationId.current += 1;
     setDestination({ ...next, kind, id: destinationId.current });
   }, []);
+
+  if (webglAvailable === null) return null;
+  if (!webglAvailable) return <SceneFallback onReady={onReady} />;
 
   return (
     <Canvas
