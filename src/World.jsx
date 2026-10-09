@@ -489,10 +489,10 @@ function makeFinGeometry() {
 function makeTailGeometry() {
   return new THREE.TubeGeometry(
     new THREE.CatmullRomCurve3([
-      new THREE.Vector3(0, 0.56, -0.42),
-      new THREE.Vector3(0.05, 0.52, -0.72),
-      new THREE.Vector3(-0.2, 0.6, -0.93),
-      new THREE.Vector3(-0.38, 0.8, -0.78),
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(0.04, -0.02, -0.27),
+      new THREE.Vector3(-0.16, 0.08, -0.47),
+      new THREE.Vector3(-0.3, 0.27, -0.36),
     ]),
     24,
     0.075,
@@ -520,10 +520,10 @@ function makeStarGeometry() {
 function makeScarfGeometry() {
   return new THREE.TubeGeometry(
     new THREE.CatmullRomCurve3([
-      new THREE.Vector3(0, 1.54, 0.2),
-      new THREE.Vector3(0.05, 1.34, 0.38),
-      new THREE.Vector3(0.18, 1.1, 0.44),
-      new THREE.Vector3(0.3, 0.86, 0.42),
+      new THREE.Vector3(0.02, 0, 0.22),
+      new THREE.Vector3(0.03, -0.17, 0.31),
+      new THREE.Vector3(0.17, -0.34, 0.3),
+      new THREE.Vector3(0.29, -0.5, 0.2),
     ]),
     24,
     0.065,
@@ -564,29 +564,36 @@ function tryMove(actor, deltaX, deltaZ) {
 function Naverio({ destination }) {
   const root = useRef();
   const body = useRef();
+  const head = useRef();
   const face = useRef();
   const tail = useRef();
   const scarf = useRef();
+  const leftArm = useRef();
+  const rightArm = useRef();
+  const leftLeg = useRef();
+  const rightLeg = useRef();
   const leftFin = useRef();
   const rightFin = useRef();
-  const leftFoot = useRef();
-  const rightFoot = useRef();
   const leftEye = useRef();
   const rightEye = useRef();
+  const leftPupil = useRef();
+  const rightPupil = useRef();
   const mouth = useRef();
   const smile = useRef();
-  const bodyGeometry = useMemo(() => new THREE.CapsuleGeometry(0.47, 0.72, 8, 20), []);
+  const bodyGeometry = useMemo(() => new THREE.CapsuleGeometry(0.38, 0.62, 8, 22), []);
+  const headGeometry = useMemo(() => new THREE.SphereGeometry(0.55, 28, 20), []);
+  const limbGeometry = useMemo(() => new THREE.CapsuleGeometry(0.11, 0.3, 6, 14), []);
   const finGeometry = useMemo(() => makeFinGeometry(), []);
   const tailGeometry = useMemo(() => makeTailGeometry(), []);
   const scarfGeometry = useMemo(() => makeScarfGeometry(), []);
   const starGeometry = useMemo(() => makeStarGeometry(), []);
   const smileGeometry = useMemo(() => new THREE.TubeGeometry(
     new THREE.CatmullRomCurve3([
-      new THREE.Vector3(-0.12, 1.12, 0.7),
-      new THREE.Vector3(-0.06, 1.06, 0.72),
-      new THREE.Vector3(0, 1.05, 0.73),
-      new THREE.Vector3(0.06, 1.06, 0.72),
-      new THREE.Vector3(0.12, 1.12, 0.7),
+      new THREE.Vector3(-0.11, -0.16, 0.55),
+      new THREE.Vector3(-0.055, -0.2, 0.57),
+      new THREE.Vector3(0, -0.205, 0.58),
+      new THREE.Vector3(0.055, -0.2, 0.57),
+      new THREE.Vector3(0.11, -0.16, 0.55),
     ]),
     14,
     0.016,
@@ -617,12 +624,14 @@ function Naverio({ destination }) {
 
   useEffect(() => () => {
     bodyGeometry.dispose();
+    headGeometry.dispose();
+    limbGeometry.dispose();
     finGeometry.dispose();
     tailGeometry.dispose();
     scarfGeometry.dispose();
     starGeometry.dispose();
     smileGeometry.dispose();
-  }, [bodyGeometry, finGeometry, tailGeometry, scarfGeometry, starGeometry, smileGeometry]);
+  }, [bodyGeometry, headGeometry, limbGeometry, finGeometry, tailGeometry, scarfGeometry, starGeometry, smileGeometry]);
 
   useFrame(({ clock }, delta) => {
     if (!root.current) return;
@@ -723,141 +732,205 @@ function Naverio({ destination }) {
     const moving = movingToTarget || actor.mode === 'play';
     const cycle = time * (actor.mode === 'run' ? 11 : 8.1) + actor.seed;
     const bob = moving ? Math.abs(Math.sin(cycle)) * 0.045 : Math.sin(time * 1.8 + actor.seed) * 0.012;
-    root.current.position.set(actor.x, groundHeight(actor.x, actor.z) + 0.06 + bob, actor.z);
+    root.current.position.set(actor.x, groundHeight(actor.x, actor.z) + 0.27 + bob, actor.z);
     root.current.rotation.y = THREE.MathUtils.lerp(root.current.rotation.y, actor.heading, 0.1);
 
     if (body.current) {
       body.current.rotation.z = THREE.MathUtils.lerp(body.current.rotation.z, moving ? Math.sin(cycle) * 0.04 : 0, 0.12);
-      body.current.rotation.x = THREE.MathUtils.lerp(body.current.rotation.x, actor.mode === 'rest' ? 0.07 : 0, 0.1);
+      body.current.rotation.x = THREE.MathUtils.lerp(body.current.rotation.x, actor.mode === 'rest' ? 0.07 : moving ? -0.035 : 0, 0.1);
       body.current.scale.y = THREE.MathUtils.lerp(body.current.scale.y, actor.mode === 'rest' ? 0.97 : 1, 0.1);
     }
+    const glance = Math.sin(time * (actor.mode === 'observe' ? 0.72 : 0.32) + actor.seed) * (actor.mode === 'observe' ? 0.034 : 0.016);
+    const glanceHeight = Math.cos(time * 0.45 + actor.seed) * 0.014;
+    if (head.current) {
+      head.current.rotation.y = THREE.MathUtils.lerp(head.current.rotation.y, glance * 0.72, 0.08);
+      head.current.rotation.x = THREE.MathUtils.lerp(head.current.rotation.x, actor.mode === 'observe' ? -0.065 : actor.mode === 'rest' ? 0.04 : 0, 0.08);
+      head.current.rotation.z = THREE.MathUtils.lerp(head.current.rotation.z, moving ? Math.sin(cycle) * 0.018 : Math.sin(time * 0.85 + actor.seed) * 0.014, 0.1);
+    }
     if (face.current) {
-      face.current.rotation.z = THREE.MathUtils.lerp(face.current.rotation.z, moving ? Math.sin(cycle) * 0.024 : Math.sin(time * 0.85 + actor.seed) * 0.02, 0.1);
-      face.current.rotation.x = THREE.MathUtils.lerp(face.current.rotation.x, actor.mode === 'observe' ? -0.05 : actor.mode === 'rest' ? 0.08 : 0, 0.08);
+      face.current.rotation.z = THREE.MathUtils.lerp(face.current.rotation.z, moving ? Math.sin(cycle) * 0.02 : 0, 0.1);
     }
     if (tail.current) tail.current.rotation.z = Math.sin(time * (moving ? 5.5 : 1.5) + actor.seed) * (moving ? 0.1 : 0.045);
     if (scarf.current) scarf.current.rotation.z = Math.sin(time * (moving ? 5.5 : 1.5) + actor.seed) * (moving ? 0.1 : 0.035);
-    if (leftFin.current) leftFin.current.rotation.z = THREE.MathUtils.lerp(leftFin.current.rotation.z, -0.22 + Math.sin(time * 1.9 + actor.seed) * 0.04, 0.1);
-    if (rightFin.current) rightFin.current.rotation.z = THREE.MathUtils.lerp(rightFin.current.rotation.z, 0.22 - Math.sin(time * 1.9 + actor.seed) * 0.04, 0.1);
-    if (leftFoot.current) leftFoot.current.rotation.x = moving ? Math.sin(cycle) * 0.36 : 0;
-    if (rightFoot.current) rightFoot.current.rotation.x = moving ? -Math.sin(cycle) * 0.36 : 0;
+    if (leftFin.current) leftFin.current.rotation.z = THREE.MathUtils.lerp(leftFin.current.rotation.z, -0.22 + Math.sin(time * 1.9 + actor.seed) * 0.035, 0.1);
+    if (rightFin.current) rightFin.current.rotation.z = THREE.MathUtils.lerp(rightFin.current.rotation.z, 0.22 - Math.sin(time * 1.9 + actor.seed) * 0.035, 0.1);
+    if (leftArm.current) {
+      leftArm.current.rotation.z = THREE.MathUtils.lerp(leftArm.current.rotation.z, -0.12 + (moving ? Math.sin(cycle) * 0.24 : 0), 0.16);
+      leftArm.current.rotation.x = THREE.MathUtils.lerp(leftArm.current.rotation.x, moving ? Math.cos(cycle) * 0.09 : 0, 0.12);
+    }
+    if (rightArm.current) {
+      rightArm.current.rotation.z = THREE.MathUtils.lerp(rightArm.current.rotation.z, 0.12 - (moving ? Math.sin(cycle) * 0.24 : 0), 0.16);
+      rightArm.current.rotation.x = THREE.MathUtils.lerp(rightArm.current.rotation.x, moving ? -Math.cos(cycle) * 0.09 : 0, 0.12);
+    }
+    if (leftLeg.current) leftLeg.current.rotation.x = moving ? Math.sin(cycle) * 0.34 : 0;
+    if (rightLeg.current) rightLeg.current.rotation.x = moving ? -Math.sin(cycle) * 0.34 : 0;
 
-    const eyeHeight = actor.blinkUntil > time ? 0.08 : actor.mode === 'rest' ? 0.58 : 1;
+    const eyeHeight = actor.blinkUntil > time ? 0.08 : actor.mode === 'rest' ? 0.82 : 1;
     if (leftEye.current) leftEye.current.scale.y = THREE.MathUtils.lerp(leftEye.current.scale.y, eyeHeight, 0.5);
     if (rightEye.current) rightEye.current.scale.y = THREE.MathUtils.lerp(rightEye.current.scale.y, eyeHeight, 0.5);
 
-    const glance = Math.sin(time * (actor.mode === 'observe' ? 0.72 : 0.32) + actor.seed) * (actor.mode === 'observe' ? 0.07 : 0.035);
-    const glanceHeight = Math.cos(time * 0.45 + actor.seed) * 0.018;
-    if (leftEye.current) {
-      leftEye.current.position.x = -0.19 + glance;
-      leftEye.current.position.y = 1.31 + glanceHeight;
+    if (leftPupil.current) {
+      leftPupil.current.position.x = glance;
+      leftPupil.current.position.y = glanceHeight;
     }
-    if (rightEye.current) {
-      rightEye.current.position.x = 0.19 + glance;
-      rightEye.current.position.y = 1.31 + glanceHeight;
+    if (rightPupil.current) {
+      rightPupil.current.position.x = glance;
+      rightPupil.current.position.y = glanceHeight;
     }
-    if (face.current) face.current.rotation.y = THREE.MathUtils.lerp(face.current.rotation.y, glance * 0.7, 0.08);
     if (mouth.current) {
       const talking = actor.speakUntil > time;
-      const opening = talking ? 0.42 + Math.abs(Math.sin(time * 13)) * 0.32 : actor.smileUntil > time ? 0.12 : 0.06;
+      const opening = talking ? 0.5 + Math.abs(Math.sin(time * 13)) * 0.34 : actor.smileUntil > time ? 0.2 : 0.07;
       mouth.current.scale.y = THREE.MathUtils.lerp(mouth.current.scale.y, opening, 0.32);
     }
-    if (smile.current) smile.current.scale.y = THREE.MathUtils.lerp(smile.current.scale.y, actor.smileUntil > time ? 1 : 0.48, 0.16);
+    if (smile.current) smile.current.scale.y = THREE.MathUtils.lerp(smile.current.scale.y, actor.smileUntil > time ? 1 : 0.72, 0.16);
   });
 
   return (
-    <group ref={root} scale={0.74}>
-      <group ref={tail}>
+    <group ref={root} scale={0.82}>
+      <group ref={tail} position={[0, 0.78, -0.31]}>
         <mesh geometry={tailGeometry} castShadow>
-          <meshStandardMaterial color="#6f9d96" roughness={0.65} />
+          <meshStandardMaterial color="#537d7f" roughness={0.65} />
         </mesh>
-        <mesh position={[-0.38, 0.8, -0.78]}>
+        <mesh position={[-0.3, 0.27, -0.36]}>
           <sphereGeometry args={[0.095, 12, 8]} />
           <meshStandardMaterial color="#d8ae62" emissive="#b97936" emissiveIntensity={0.45} roughness={0.4} />
         </mesh>
       </group>
 
-      <group ref={body}>
-        <mesh geometry={bodyGeometry} position={[0, 0.64, 0]} scale={[0.95, 0.98, 0.82]} castShadow>
-          <meshStandardMaterial color="#29454c" roughness={0.78} metalness={0.06} />
+      <group ref={body} position={[0, 0.1, 0]}>
+        <mesh geometry={bodyGeometry} position={[0, 0.72, 0]} scale={[1.08, 1, 0.88]} castShadow>
+          <meshStandardMaterial color="#294a54" roughness={0.78} metalness={0.04} />
         </mesh>
-        <mesh position={[0, 0.82, 0.39]} scale={[0.47, 0.56, 0.09]}>
-          <sphereGeometry args={[0.85, 24, 16]} />
+        <mesh position={[0, 0.74, 0.33]} scale={[0.54, 0.62, 0.1]}>
+          <sphereGeometry args={[0.62, 24, 16]} />
           <meshStandardMaterial color="#e4d5bc" roughness={0.9} />
         </mesh>
-        <mesh position={[0, 0.48, 0.7]}>
-          <sphereGeometry args={[0.07, 12, 8]} />
-          <meshStandardMaterial color="#e0ae62" emissive="#be7632" emissiveIntensity={0.75} roughness={0.35} />
-        </mesh>
-        <mesh geometry={starGeometry} position={[0, 0.78, 0.5]} scale={0.22}>
+        <mesh geometry={starGeometry} position={[0, 0.74, 0.43]} scale={0.16}>
           <meshStandardMaterial color="#e8bb6c" emissive="#bd7a31" emissiveIntensity={0.24} roughness={0.5} />
         </mesh>
       </group>
 
-      <group ref={leftFoot} position={[-0.27, 0.13, 0.18]}>
-        <mesh castShadow scale={[1.1, 0.6, 1.22]}>
-          <sphereGeometry args={[0.23, 16, 12]} />
-          <meshStandardMaterial color="#213b42" roughness={0.83} />
+      <group ref={leftLeg} position={[-0.21, 0.31, 0.02]}>
+        <mesh geometry={limbGeometry} position={[0, -0.16, 0]} castShadow>
+          <meshStandardMaterial color="#203d49" roughness={0.82} />
+        </mesh>
+        <mesh position={[0, -0.42, 0.12]} scale={[1.12, 0.56, 1.42]} castShadow>
+          <sphereGeometry args={[0.2, 16, 12]} />
+          <meshStandardMaterial color="#203d49" roughness={0.83} />
         </mesh>
       </group>
-      <group ref={rightFoot} position={[0.27, 0.13, 0.18]}>
-        <mesh castShadow scale={[1.1, 0.6, 1.22]}>
-          <sphereGeometry args={[0.23, 16, 12]} />
-          <meshStandardMaterial color="#213b42" roughness={0.83} />
+      <group ref={rightLeg} position={[0.21, 0.31, 0.02]}>
+        <mesh geometry={limbGeometry} position={[0, -0.16, 0]} castShadow>
+          <meshStandardMaterial color="#203d49" roughness={0.82} />
+        </mesh>
+        <mesh position={[0, -0.42, 0.12]} scale={[1.12, 0.56, 1.42]} castShadow>
+          <sphereGeometry args={[0.2, 16, 12]} />
+          <meshStandardMaterial color="#203d49" roughness={0.83} />
         </mesh>
       </group>
 
-      <mesh ref={scarf} geometry={scarfGeometry} castShadow>
-        <meshStandardMaterial color="#d39b68" roughness={0.72} />
-      </mesh>
+      <group ref={leftArm} position={[-0.43, 0.89, 0.01]}>
+        <mesh geometry={limbGeometry} position={[0, -0.15, 0.04]} rotation={[0, 0, -0.08]} castShadow>
+          <meshStandardMaterial color="#294a54" roughness={0.78} />
+        </mesh>
+        <mesh position={[0, -0.34, 0.1]} scale={[0.86, 0.8, 0.86]} castShadow>
+          <sphereGeometry args={[0.13, 14, 10]} />
+          <meshStandardMaterial color="#e4d5bc" roughness={0.84} />
+        </mesh>
+      </group>
+      <group ref={rightArm} position={[0.43, 0.89, 0.01]}>
+        <mesh geometry={limbGeometry} position={[0, -0.15, 0.04]} rotation={[0, 0, 0.08]} castShadow>
+          <meshStandardMaterial color="#294a54" roughness={0.78} />
+        </mesh>
+        <mesh position={[0, -0.34, 0.1]} scale={[0.86, 0.8, 0.86]} castShadow>
+          <sphereGeometry args={[0.13, 14, 10]} />
+          <meshStandardMaterial color="#e4d5bc" roughness={0.84} />
+        </mesh>
+      </group>
 
-      <group ref={face}>
-        <group ref={leftEye} position={[-0.19, 1.31, 0.77]}>
-          <mesh scale={[0.85, 1, 0.32]}>
-            <sphereGeometry args={[0.13, 20, 14]} />
-            <meshStandardMaterial color="#10272d" roughness={0.22} />
+      <group ref={scarf} position={[0, 1.22, 0]}>
+        <mesh geometry={scarfGeometry} castShadow>
+          <meshStandardMaterial color="#d39b68" roughness={0.72} />
+        </mesh>
+        <mesh position={[0, 0.02, 0.24]} scale={[0.7, 0.68, 0.75]}>
+          <sphereGeometry args={[0.14, 16, 12]} />
+          <meshStandardMaterial color="#e0ae62" roughness={0.55} />
+        </mesh>
+      </group>
+
+      <group ref={head} position={[0, 1.47, 0]}>
+        <mesh geometry={headGeometry} scale={[0.96, 1.04, 0.9]} castShadow>
+          <meshStandardMaterial color="#3b626b" roughness={0.76} metalness={0.02} />
+        </mesh>
+        <mesh position={[0, -0.015, 0.47]} scale={[0.71, 0.78, 0.12]}>
+          <sphereGeometry args={[0.55, 24, 16]} />
+          <meshStandardMaterial color="#e7dbc5" roughness={0.88} />
+        </mesh>
+
+        <group ref={face}>
+          <group ref={leftEye} position={[-0.17, 0.075, 0.525]}>
+            <mesh scale={[0.85, 1, 0.22]}>
+              <sphereGeometry args={[0.11, 20, 14]} />
+              <meshStandardMaterial color="#fff4d8" roughness={0.38} />
+            </mesh>
+            <group ref={leftPupil} position={[0, 0, 0.036]}>
+              <mesh scale={[0.72, 1, 0.3]}>
+                <sphereGeometry args={[0.06, 16, 12]} />
+                <meshStandardMaterial color="#253744" roughness={0.24} />
+              </mesh>
+              <mesh position={[0.018, 0.022, 0.018]}>
+                <sphereGeometry args={[0.018, 10, 8]} />
+                <meshBasicMaterial color="#ffffff" />
+              </mesh>
+            </group>
+          </group>
+          <group ref={rightEye} position={[0.17, 0.075, 0.525]}>
+            <mesh scale={[0.85, 1, 0.22]}>
+              <sphereGeometry args={[0.11, 20, 14]} />
+              <meshStandardMaterial color="#fff4d8" roughness={0.38} />
+            </mesh>
+            <group ref={rightPupil} position={[0, 0, 0.036]}>
+              <mesh scale={[0.72, 1, 0.3]}>
+                <sphereGeometry args={[0.06, 16, 12]} />
+                <meshStandardMaterial color="#253744" roughness={0.24} />
+              </mesh>
+              <mesh position={[0.018, 0.022, 0.018]}>
+                <sphereGeometry args={[0.018, 10, 8]} />
+                <meshBasicMaterial color="#ffffff" />
+              </mesh>
+            </group>
+          </group>
+          <mesh position={[-0.28, -0.09, 0.535]} scale={[1.2, 0.68, 0.2]}>
+            <sphereGeometry args={[0.065, 14, 10]} />
+            <meshStandardMaterial color="#e0a19a" transparent opacity={0.52} roughness={0.65} />
           </mesh>
-          <mesh position={[0.032, 0.04, 0.05]}>
-            <sphereGeometry args={[0.036, 10, 8]} />
-            <meshBasicMaterial color="#fff7e1" />
+          <mesh position={[0.28, -0.09, 0.535]} scale={[1.2, 0.68, 0.2]}>
+            <sphereGeometry args={[0.065, 14, 10]} />
+            <meshStandardMaterial color="#e0a19a" transparent opacity={0.52} roughness={0.65} />
           </mesh>
-          <mesh position={[0, -0.03, 0.052]} scale={[0.52, 0.4, 0.2]}>
-            <sphereGeometry args={[0.076, 12, 8]} />
-            <meshStandardMaterial color="#87c0a8" roughness={0.4} />
+          <mesh position={[0, -0.055, 0.57]} scale={[0.56, 0.56, 0.4]}>
+            <sphereGeometry args={[0.045, 14, 10]} />
+            <meshStandardMaterial color="#c48d78" roughness={0.62} />
+          </mesh>
+          <mesh ref={mouth} position={[0, -0.17, 0.555]} scale={[1, 0.07, 0.42]}>
+            <sphereGeometry args={[0.085, 18, 12]} />
+            <meshStandardMaterial color="#5d3b49" roughness={0.72} />
+          </mesh>
+          <mesh ref={smile} geometry={smileGeometry}>
+            <meshBasicMaterial color="#754f53" />
           </mesh>
         </group>
-        <group ref={rightEye} position={[0.19, 1.31, 0.77]}>
-          <mesh scale={[0.85, 1, 0.32]}>
-            <sphereGeometry args={[0.13, 20, 14]} />
-            <meshStandardMaterial color="#10272d" roughness={0.22} />
-          </mesh>
-          <mesh position={[0.032, 0.04, 0.05]}>
-            <sphereGeometry args={[0.036, 10, 8]} />
-            <meshBasicMaterial color="#fff7e1" />
-          </mesh>
-          <mesh position={[0, -0.03, 0.052]} scale={[0.52, 0.4, 0.2]}>
-            <sphereGeometry args={[0.076, 12, 8]} />
-            <meshStandardMaterial color="#87c0a8" roughness={0.4} />
-          </mesh>
-        </group>
-        <mesh ref={mouth} position={[0, 1.08, 0.78]} scale={[1, 0.08, 0.34]}>
-          <sphereGeometry args={[0.085, 16, 10]} />
-          <meshStandardMaterial color="#603f45" roughness={0.72} />
-        </mesh>
-        <mesh ref={smile} geometry={smileGeometry}>
-          <meshBasicMaterial color="#754f53" />
-        </mesh>
       </group>
 
-      <mesh ref={leftFin} geometry={finGeometry} position={[-0.5, 1.08, 0.03]} rotation={[0.08, -0.35, -0.5]} scale={[0.6, 0.82, 0.48]} castShadow>
-        <meshStandardMaterial color="#456e73" roughness={0.7} />
+      <mesh ref={leftFin} geometry={finGeometry} position={[-0.49, 1.51, -0.04]} rotation={[0.2, -0.42, -0.86]} scale={[0.42, 0.7, 0.32]} castShadow>
+        <meshStandardMaterial color="#527c80" roughness={0.72} />
       </mesh>
-      <mesh ref={rightFin} geometry={finGeometry} position={[0.5, 1.08, 0.03]} rotation={[-0.08, 0.35, 0.5]} scale={[0.6, 0.82, 0.48]} castShadow>
-        <meshStandardMaterial color="#456e73" roughness={0.7} />
+      <mesh ref={rightFin} geometry={finGeometry} position={[0.49, 1.51, -0.04]} rotation={[-0.2, 0.42, 0.86]} scale={[0.42, 0.7, 0.32]} castShadow>
+        <meshStandardMaterial color="#527c80" roughness={0.72} />
       </mesh>
-      <mesh position={[0, 1.82, -0.05]} scale={[0.22, 0.12, 0.15]}>
-        <sphereGeometry args={[0.18, 14, 10]} />
-        <meshStandardMaterial color="#304a58" roughness={0.82} />
+      <mesh position={[0, 2.02, -0.02]} rotation={[0, 0, 0.05]} scale={[0.16, 0.14, 0.13]}>
+        <sphereGeometry args={[0.16, 16, 12]} />
+        <meshStandardMaterial color="#d9aa68" emissive="#b87937" emissiveIntensity={0.28} roughness={0.56} />
       </mesh>
     </group>
   );
