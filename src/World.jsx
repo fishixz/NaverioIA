@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { ContactShadows, MapControls, Sky, Sparkles } from '@react-three/drei';
+import { ContactShadows, MapControls, Sky, Sparkles, useAnimations, useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
+import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 
 const CITY_LIMIT = 14.9;
 const NAV_CLEARANCE = 0.18;
@@ -1009,6 +1010,219 @@ function Naverio({ destination }) {
   );
 }
 
+function createNaverioScarf() {
+  const group = new THREE.Group();
+  group.name = 'naverio-scarf';
+  const material = new THREE.MeshStandardMaterial({ color: '#d7a35e', roughness: 0.68, metalness: 0.02 });
+  const collar = new THREE.Mesh(new THREE.TorusGeometry(8.4, 1.35, 8, 24), material);
+  collar.rotation.y = Math.PI / 2;
+  collar.castShadow = true;
+  group.add(collar);
+  const tail = new THREE.Mesh(new THREE.BoxGeometry(5.6, 1.75, 1.5), material);
+  tail.position.set(4.8, -4.2, 0);
+  tail.rotation.z = -0.22;
+  tail.castShadow = true;
+  group.add(tail);
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(1.45, 10, 8), new THREE.MeshStandardMaterial({ color: '#f0c776', roughness: 0.5 }));
+  tip.position.set(7.2, -5.1, 0);
+  tip.castShadow = true;
+  group.add(tip);
+  return group;
+}
+
+function RiggedFox({ destination, onReady, companion = false }) {
+  const root = useRef();
+  const modelRoot = useRef();
+  const currentAction = useRef(null);
+  const ready = useRef(false);
+  const { scene, animations } = useGLTF('/models/naverio-fox.glb');
+  const clonedScene = useMemo(() => SkeletonUtils.clone(scene), [scene]);
+  const { actions } = useAnimations(animations, modelRoot);
+  const bones = useMemo(() => ({
+    neck: clonedScene.getObjectByName('b_Neck_04'),
+    head: clonedScene.getObjectByName('b_Head_05'),
+    tail: clonedScene.getObjectByName('b_Tail01_012'),
+  }), [clonedScene]);
+  const restRotations = useMemo(() => ({
+    neck: bones.neck?.rotation.clone(),
+    head: bones.head?.rotation.clone(),
+    tail: bones.tail?.rotation.clone(),
+  }), [bones]);
+  const scarf = useMemo(() => (companion ? null : createNaverioScarf()), [companion]);
+  const initial = companion ? { x: 10.2, z: -1.8 } : { x: -1.45, z: -2.15 };
+  const state = useRef({
+    x: initial.x,
+    z: initial.z,
+    targetX: initial.x,
+    targetZ: initial.z,
+    finalX: initial.x,
+    finalZ: initial.z,
+    waypoint: false,
+    repathAt: 0,
+    radius: companion ? 0.42 : 0.5,
+    mode: 'rest',
+    modeUntil: companion ? 5.2 : 3.8,
+    lastDestination: 0,
+    heading: companion ? Math.PI * 0.5 : 0,
+    stuckTime: 0,
+    seed: companion ? 4.2 : 1.7,
+  });
+
+  useEffect(() => {
+    clonedScene.traverse((object) => {
+      if (!object.isMesh) return;
+      object.castShadow = true;
+      object.receiveShadow = true;
+    });
+  }, [clonedScene]);
+
+  useEffect(() => {
+    if (!scarf || !bones.neck) return undefined;
+    bones.neck.add(scarf);
+    return () => bones.neck.remove(scarf);
+  }, [bones.neck, scarf]);
+
+  useEffect(() => {
+    if (!scarf) return undefined;
+    return () => scarf.traverse((object) => {
+      object.geometry?.dispose?.();
+      if (Array.isArray(object.material)) object.material.forEach((material) => material.dispose?.());
+      else object.material?.dispose?.();
+    });
+  }, [scarf]);
+
+  useEffect(() => {
+    if (ready.current) return;
+    ready.current = true;
+    onReady?.();
+  }, [scene, onReady]);
+
+  useEffect(() => {
+    const idle = actions?.Survey || actions?.Idle || Object.values(actions || {})[0];
+    if (!idle) return undefined;
+    idle.reset().fadeIn(0.3).play();
+    currentAction.current = idle;
+    return () => idle.fadeOut(0.2);
+  }, [actions]);
+
+  useFrame(({ clock }, delta) => {
+    if (!root.current || !actions) return;
+    const time = clock.elapsedTime;
+    const dt = Math.min(delta, 0.06);
+    const actor = state.current;
+
+    if (!companion && destination && destination.id !== actor.lastDestination) {
+      actor.lastDestination = destination.id;
+      setActorGoal(actor, destination.x, destination.z);
+      actor.mode = 'walk';
+      actor.modeUntil = time + 18;
+    }
+
+    if (time > actor.modeUntil) {
+      const roll = Math.random();
+      if (roll < 0.62) {
+        const [x, z] = SAFE_SPOTS[(Math.floor(time * 2) + Math.floor(actor.seed * 10)) % SAFE_SPOTS.length];
+        setActorGoal(actor, x + (Math.random() - 0.5) * 1.1, z + (Math.random() - 0.5) * 1.1);
+        actor.mode = roll < 0.12 ? 'run' : 'walk';
+        actor.modeUntil = time + (companion ? 10 : 15) + Math.random() * 9;
+      } else if (roll < 0.8) {
+        actor.mode = 'observe';
+        actor.heading += (Math.random() - 0.5) * 1.8;
+        actor.modeUntil = time + 2.6 + Math.random() * 3.8;
+      } else {
+        actor.mode = 'rest';
+        actor.modeUntil = time + 3.4 + Math.random() * 4.5;
+      }
+    }
+
+    if (!actor.waypoint && time >= actor.repathAt && lineIsBlocked(actor.x, actor.z, actor.finalX, actor.finalZ, actor.radius)) {
+      const detour = findDetourPoint(actor.x, actor.z, actor.finalX, actor.finalZ, actor.radius);
+      if (detour) {
+        actor.targetX = detour.x;
+        actor.targetZ = detour.z;
+        actor.waypoint = true;
+      }
+      actor.repathAt = time + 0.7;
+    }
+
+    const dx = actor.targetX - actor.x;
+    const dz = actor.targetZ - actor.z;
+    const distance = Math.hypot(dx, dz);
+    const movingToTarget = (actor.mode === 'walk' || actor.mode === 'run') && distance > 0.16;
+    if (movingToTarget) {
+      const speed = actor.mode === 'run' ? 1.35 : 0.66;
+      const step = Math.min(distance, speed * dt);
+      const moved = tryMove(actor, (dx / distance) * step, (dz / distance) * step);
+      if (!moved) {
+        actor.stuckTime += dt;
+        const detour = findDetourPoint(actor.x, actor.z, actor.finalX, actor.finalZ, actor.radius);
+        if (detour) {
+          actor.targetX = detour.x;
+          actor.targetZ = detour.z;
+          actor.waypoint = true;
+        }
+        if (actor.stuckTime > 0.85) {
+          const [escapeX, escapeZ] = SAFE_SPOTS[(Math.floor(time * 3) + Math.floor(actor.seed)) % SAFE_SPOTS.length];
+          setActorGoal(actor, escapeX, escapeZ);
+          actor.mode = 'walk';
+          actor.modeUntil = time + 12;
+          actor.stuckTime = 0;
+        }
+      } else {
+        actor.stuckTime = 0;
+      }
+      actor.heading = THREE.MathUtils.lerp(actor.heading, Math.atan2(dx, dz), 0.13);
+    } else if (actor.mode === 'walk' || actor.mode === 'run') {
+      if (actor.waypoint) {
+        actor.waypoint = false;
+        actor.targetX = actor.finalX;
+        actor.targetZ = actor.finalZ;
+        actor.repathAt = time + 0.05;
+      } else {
+        actor.mode = 'observe';
+        actor.modeUntil = time + 2.2 + Math.random() * 2.8;
+      }
+    }
+
+    const safe = safeDestination(actor.x, actor.z, actor.radius);
+    actor.x = safe.x;
+    actor.z = safe.z;
+    const moving = movingToTarget;
+    root.current.position.set(actor.x, groundHeight(actor.x, actor.z) + (companion ? 0.015 : 0.02), actor.z);
+    root.current.rotation.y = THREE.MathUtils.lerp(root.current.rotation.y, actor.heading, 0.12);
+
+    const clipName = moving ? (actor.mode === 'run' ? 'Run' : 'Walk') : 'Survey';
+    const nextAction = actions[clipName] || actions.Survey || Object.values(actions)[0];
+    if (nextAction && nextAction !== currentAction.current) {
+      nextAction.reset().fadeIn(0.28).play();
+      currentAction.current?.fadeOut(0.28);
+      currentAction.current = nextAction;
+    }
+
+    const look = Math.sin(time * (actor.mode === 'observe' ? 0.8 : 0.25) + actor.seed) * (actor.mode === 'observe' ? 0.38 : 0.16);
+    const lookUp = Math.cos(time * 0.44 + actor.seed) * 0.12;
+    if (bones.neck && restRotations.neck) {
+      bones.neck.rotation.y = THREE.MathUtils.lerp(bones.neck.rotation.y, restRotations.neck.y + look * 0.22, 0.12);
+      bones.neck.rotation.z = THREE.MathUtils.lerp(bones.neck.rotation.z, restRotations.neck.z + lookUp * 0.12, 0.12);
+    }
+    if (bones.head && restRotations.head) {
+      bones.head.rotation.y = THREE.MathUtils.lerp(bones.head.rotation.y, restRotations.head.y + look * 0.46, 0.12);
+      bones.head.rotation.z = THREE.MathUtils.lerp(bones.head.rotation.z, restRotations.head.z + lookUp * 0.16, 0.12);
+    }
+    if (bones.tail && restRotations.tail) {
+      bones.tail.rotation.z = THREE.MathUtils.lerp(bones.tail.rotation.z, restRotations.tail.z + Math.sin(time * (moving ? 5.5 : 1.7) + actor.seed) * (moving ? 0.12 : 0.06), 0.1);
+    }
+  });
+
+  return (
+    <group ref={root}>
+      <group ref={modelRoot} scale={companion ? 0.013 : 0.018} rotation={[0, -Math.PI / 2, 0]}>
+        <primitive object={clonedScene} />
+      </group>
+    </group>
+  );
+}
+
 function CameraBounds() {
   const controls = useThree((state) => state.controls);
   useFrame(() => {
@@ -1088,7 +1302,6 @@ export default function World({ onReady }) {
       camera={{ position: [13.2, 14.8, 17.6], fov: 41, near: 0.1, far: 90 }}
       gl={{ antialias: true, powerPreference: 'high-performance' }}
       fallback={<SceneFallback onReady={onReady} />}
-      onCreated={() => onReady?.()}
     >
       <color attach="background" args={['#9db6b4']} />
       <fog attach="fog" args={['#9db6b4', 28, 58]} />
@@ -1109,7 +1322,8 @@ export default function World({ onReady }) {
       />
       <CityWorld onSelect={selectDestination} />
       <InteractionMarker destination={destination} />
-      <Naverio destination={destination} />
+      <RiggedFox destination={destination} onReady={onReady} />
+      <RiggedFox companion />
       <ContactShadows position={[0, 0.08, 0]} opacity={0.22} scale={29} blur={2.8} far={8} resolution={512} />
       <MapControls
         makeDefault
