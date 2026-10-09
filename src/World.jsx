@@ -25,6 +25,8 @@ const colors = {
   treeLight: '#83a184',
   trunk: '#7e6c5a',
   accent: '#c18b65',
+  curb: '#e1ded2',
+  roof: '#506564',
 };
 
 const SAFE_SPOTS = [
@@ -55,6 +57,8 @@ const NAV_OBSTACLES = [
   { type: 'circle', x: 4.65, z: -7.75, radius: 0.72, label: 'arvore' },
   { type: 'circle', x: 9.65, z: -7.5, radius: 0.78, label: 'arvore' },
   { type: 'circle', x: 9.25, z: -4.35, radius: 0.64, label: 'arvore' },
+  { type: 'circle', x: 7.9, z: -6.95, radius: 0.88, label: 'fonte' },
+  { type: 'rect', x: 6.6, z: -4.48, width: 1.55, depth: 0.52, label: 'banco' },
   { type: 'circle', x: -2.5, z: -3.3, radius: 0.16, label: 'poste' },
   { type: 'circle', x: 2.6, z: -3.3, radius: 0.16, label: 'poste' },
   { type: 'circle', x: -2.6, z: 3.3, radius: 0.16, label: 'poste' },
@@ -217,18 +221,168 @@ function safeDestination(x, z, radius = 0.28) {
   return nearestWalkablePoint(clamped.x, clamped.z, radius);
 }
 
+function createCanvasTexture(draw, repeatX, repeatY) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const context = canvas.getContext('2d');
+  draw(context, canvas.width, canvas.height);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(repeatX, repeatY);
+  return texture;
+}
+
+function createCityTextures() {
+  const random = (seed) => {
+    let value = seed;
+    return () => {
+      value = (value * 1664525 + 1013904223) % 4294967296;
+      return value / 4294967296;
+    };
+  };
+  const asphaltRandom = random(44);
+  const sidewalkRandom = random(88);
+  const facadeRandom = random(124);
+  const grassRandom = random(202);
+
+  const asphalt = createCanvasTexture((context, width, height) => {
+    context.fillStyle = '#596463';
+    context.fillRect(0, 0, width, height);
+    for (let index = 0; index < 520; index += 1) {
+      const shade = asphaltRandom() > 0.5 ? 'rgba(224,222,196,0.08)' : 'rgba(20,30,31,0.1)';
+      context.fillStyle = shade;
+      const size = 1 + asphaltRandom() * 2.4;
+      context.fillRect(asphaltRandom() * width, asphaltRandom() * height, size, size);
+    }
+    context.strokeStyle = 'rgba(24,35,35,0.14)';
+    context.lineWidth = 1;
+    for (let offset = 18; offset < width; offset += 46) {
+      context.beginPath();
+      context.moveTo(offset, 0);
+      context.lineTo(offset + 9, height);
+      context.stroke();
+    }
+  }, 10, 2);
+
+  const sidewalk = createCanvasTexture((context, width, height) => {
+    context.fillStyle = '#cacac0';
+    context.fillRect(0, 0, width, height);
+    context.strokeStyle = 'rgba(85,99,96,0.2)';
+    context.lineWidth = 2;
+    for (let offset = 0; offset <= width; offset += 64) {
+      context.beginPath();
+      context.moveTo(offset, 0);
+      context.lineTo(offset, height);
+      context.stroke();
+    }
+    for (let offset = 0; offset <= height; offset += 64) {
+      context.beginPath();
+      context.moveTo(0, offset);
+      context.lineTo(width, offset);
+      context.stroke();
+    }
+    for (let index = 0; index < 230; index += 1) {
+      context.fillStyle = sidewalkRandom() > 0.5 ? 'rgba(255,255,250,0.11)' : 'rgba(52,65,63,0.08)';
+      context.fillRect(sidewalkRandom() * width, sidewalkRandom() * height, 1.1, 1.1);
+    }
+  }, 7, 1.2);
+
+  const facade = createCanvasTexture((context, width, height) => {
+    context.fillStyle = '#f4f0e5';
+    context.fillRect(0, 0, width, height);
+    for (let index = 0; index < 190; index += 1) {
+      context.fillStyle = facadeRandom() > 0.55 ? 'rgba(255,255,255,0.16)' : 'rgba(58,70,66,0.06)';
+      const size = 2 + facadeRandom() * 5;
+      context.fillRect(facadeRandom() * width, facadeRandom() * height, size, size * 0.4);
+    }
+    context.strokeStyle = 'rgba(80,91,87,0.08)';
+    context.lineWidth = 1;
+    for (let offset = 16; offset < height; offset += 35) {
+      context.beginPath();
+      context.moveTo(0, offset);
+      context.lineTo(width, offset + 5);
+      context.stroke();
+    }
+  }, 1.5, 1.2);
+
+  const grass = createCanvasTexture((context, width, height) => {
+    context.fillStyle = '#879f86';
+    context.fillRect(0, 0, width, height);
+    for (let index = 0; index < 460; index += 1) {
+      context.fillStyle = grassRandom() > 0.48 ? 'rgba(192,211,165,0.15)' : 'rgba(48,80,62,0.11)';
+      const heightMark = 1 + grassRandom() * 5;
+      context.fillRect(grassRandom() * width, grassRandom() * height, 1, heightMark);
+    }
+  }, 9, 9);
+
+  return { asphalt, sidewalk, facade, grass };
+}
+
 function Window({ position, size = [0.54, 0.62, 0.035], warm = false }) {
+  const [width, height, depth] = size;
+  const frameColor = warm ? '#d9c9a4' : '#ced8d1';
   return (
-    <mesh position={position}>
-      <boxGeometry args={size} />
-      <meshStandardMaterial
-        color={warm ? colors.windowLight : colors.glass}
-        emissive={warm ? '#b67642' : '#2e535d'}
-        emissiveIntensity={warm ? 0.42 : 0.16}
-        roughness={0.28}
-        metalness={0.08}
-      />
-    </mesh>
+    <group position={position}>
+      <mesh>
+        <boxGeometry args={size} />
+        <meshStandardMaterial
+          color={warm ? colors.windowLight : colors.glass}
+          emissive={warm ? '#b67642' : '#2e535d'}
+          emissiveIntensity={warm ? 0.42 : 0.16}
+          roughness={0.22}
+          metalness={0.11}
+        />
+      </mesh>
+      <mesh position={[0, height * 0.46, depth * 0.8]}>
+        <boxGeometry args={[width + 0.1, 0.055, depth * 1.65]} />
+        <meshStandardMaterial color={frameColor} roughness={0.66} />
+      </mesh>
+      <mesh position={[0, -height * 0.46, depth * 0.8]}>
+        <boxGeometry args={[width + 0.1, 0.055, depth * 1.65]} />
+        <meshStandardMaterial color={frameColor} roughness={0.66} />
+      </mesh>
+      <mesh position={[-width * 0.46, 0, depth * 0.8]}>
+        <boxGeometry args={[0.055, height + 0.1, depth * 1.65]} />
+        <meshStandardMaterial color={frameColor} roughness={0.66} />
+      </mesh>
+      <mesh position={[width * 0.46, 0, depth * 0.8]}>
+        <boxGeometry args={[0.055, height + 0.1, depth * 1.65]} />
+        <meshStandardMaterial color={frameColor} roughness={0.66} />
+      </mesh>
+      <mesh position={[0, 0, depth * 0.86]}>
+        <boxGeometry args={[0.038, height + 0.015, depth * 1.72]} />
+        <meshStandardMaterial color={frameColor} roughness={0.66} />
+      </mesh>
+    </group>
+  );
+}
+
+function FlowerPatch({ x, z, scale = 1, palette = ['#e7b982', '#e8d79c', '#b8c8e6'] }) {
+  const flowers = [
+    [-0.24, 0.04, 0], [0.03, 0.1, 1], [0.27, -0.05, 2], [-0.08, -0.22, 0], [0.22, 0.23, 1], [-0.31, 0.2, 2],
+  ];
+  return (
+    <group position={[x, 0.14, z]} scale={scale}>
+      <mesh receiveShadow position={[0, -0.03, 0]} scale={[0.82, 0.03, 0.6]}>
+        <cylinderGeometry args={[0.5, 0.57, 0.07, 12]} />
+        <meshStandardMaterial color="#607d68" roughness={1} />
+      </mesh>
+      {flowers.map(([offsetX, offsetZ, colorIndex], index) => (
+        <group key={`${offsetX}-${offsetZ}`} position={[offsetX, 0, offsetZ]}>
+          <mesh castShadow position={[0, 0.11, 0]} scale={[0.11, 0.14, 0.11]}>
+            <sphereGeometry args={[1, 8, 6]} />
+            <meshStandardMaterial color="#72956e" roughness={0.94} />
+          </mesh>
+          <mesh position={[0, 0.23, 0]} scale={[0.09, 0.035, 0.09]}>
+            <sphereGeometry args={[1, 8, 6]} />
+            <meshStandardMaterial color={palette[colorIndex]} emissive={palette[colorIndex]} emissiveIntensity={0.05} roughness={0.72} />
+          </mesh>
+        </group>
+      ))}
+    </group>
   );
 }
 
@@ -262,7 +416,7 @@ function StreetTree({ x, z, scale = 1, onSelect }) {
   );
 }
 
-function LowBuilding({ x, z, width, depth, height, color, warm = false, onSelect, variant = 0 }) {
+function LowBuilding({ x, z, width, depth, height, color, warm = false, onSelect, variant = 0, textures }) {
   const columns = Math.max(2, Math.floor(width / 1.2));
   const rows = Math.max(1, Math.floor(height / 1.25));
   const windows = [];
@@ -285,11 +439,21 @@ function LowBuilding({ x, z, width, depth, height, color, warm = false, onSelect
     >
       <mesh castShadow receiveShadow position={[0, height / 2, 0]}>
         <boxGeometry args={[width, height, depth]} />
-        <meshStandardMaterial color={color} roughness={0.86} />
+        <meshStandardMaterial color={color} map={textures?.facade} roughness={0.86} />
       </mesh>
       <mesh castShadow position={[0, height + 0.08, 0]}>
         <boxGeometry args={[width + 0.16, 0.18, depth + 0.16]} />
-        <meshStandardMaterial color={variant % 2 ? '#737d7a' : '#8f958e'} roughness={0.82} />
+        <meshStandardMaterial color={variant % 2 ? '#566463' : '#838b85'} roughness={0.82} />
+      </mesh>
+      {[-width / 2 + 0.18, width / 2 - 0.18].map((corner) => (
+        <mesh key={`corner-${corner}`} position={[corner, height / 2, depth / 2 + 0.035]}>
+          <boxGeometry args={[0.12, height - 0.2, 0.08]} />
+          <meshStandardMaterial color="#d1d0c4" roughness={0.86} />
+        </mesh>
+      ))}
+      <mesh position={[0, height * 0.68, depth / 2 + 0.042]}>
+        <boxGeometry args={[width - 0.45, 0.1, 0.075]} />
+        <meshStandardMaterial color={variant % 2 ? '#647170' : '#9c9f94'} roughness={0.78} />
       </mesh>
       {windows}
       <mesh position={[0, 0.52, depth / 2 + 0.04]}>
@@ -300,22 +464,38 @@ function LowBuilding({ x, z, width, depth, height, color, warm = false, onSelect
         <boxGeometry args={[width + 0.35, 0.16, 0.36]} />
         <meshStandardMaterial color={colors.concreteDark} roughness={0.95} />
       </mesh>
+      <mesh position={[0, 0.93, depth / 2 + 0.12]}>
+        <boxGeometry args={[1.15, 0.12, 0.42]} />
+        <meshStandardMaterial color={variant % 2 ? '#b98564' : '#76908a'} roughness={0.8} />
+      </mesh>
     </group>
   );
 }
 
-function NavHouse({ onSelect }) {
+function NavHouse({ onSelect, textures }) {
   const x = -5.4;
   const z = -5.9;
   return (
     <group position={[x, groundHeight(x, z), z]} onClick={(event) => { event.stopPropagation(); onSelect(x, z, 'home'); }}>
       <mesh castShadow receiveShadow position={[0, 1.16, 0]}>
         <boxGeometry args={[5.2, 2.3, 3.9]} />
-        <meshStandardMaterial color="#c9c4b7" roughness={0.82} />
+        <meshStandardMaterial color="#c9c4b7" map={textures?.facade} roughness={0.82} />
       </mesh>
-      <mesh castShadow position={[0, 2.43, 0]}>
-        <boxGeometry args={[5.45, 0.28, 4.15]} />
-        <meshStandardMaterial color="#4f6262" roughness={0.7} metalness={0.08} />
+      <mesh castShadow position={[0, 3.0, 0]} rotation={[0, Math.PI / 4, 0]}>
+        <coneGeometry args={[3.72, 1.35, 4]} />
+        <meshStandardMaterial color={colors.roof} roughness={0.74} metalness={0.04} />
+      </mesh>
+      <mesh castShadow position={[0, 2.35, 0]}>
+        <boxGeometry args={[5.45, 0.18, 4.15]} />
+        <meshStandardMaterial color="#435456" roughness={0.7} metalness={0.08} />
+      </mesh>
+      <mesh castShadow position={[1.45, 3.15, -0.72]}>
+        <boxGeometry args={[0.38, 1.15, 0.38]} />
+        <meshStandardMaterial color="#8b8275" roughness={0.9} />
+      </mesh>
+      <mesh castShadow position={[1.45, 3.76, -0.72]}>
+        <boxGeometry args={[0.5, 0.12, 0.5]} />
+        <meshStandardMaterial color="#5c6765" roughness={0.78} />
       </mesh>
       <mesh position={[0.06, 1.35, 2.0]}>
         <boxGeometry args={[2.05, 1.28, 0.06]} />
@@ -323,12 +503,16 @@ function NavHouse({ onSelect }) {
       </mesh>
       <mesh position={[-1.55, 1.26, 2.02]}>
         <boxGeometry args={[0.72, 1.32, 0.08]} />
-        <meshStandardMaterial color="#52696d" roughness={0.62} />
+        <meshStandardMaterial color="#50646a" roughness={0.62} />
       </mesh>
       <Window position={[1.72, 1.48, 2.02]} size={[0.72, 0.66, 0.07]} warm />
       <mesh position={[-1.55, 0.6, 2.04]}>
         <boxGeometry args={[0.88, 0.12, 0.18]} />
         <meshStandardMaterial color="#a27e5f" roughness={0.9} />
+      </mesh>
+      <mesh position={[-1.32, 1.34, 2.09]}>
+        <sphereGeometry args={[0.045, 10, 8]} />
+        <meshStandardMaterial color="#e7c985" metalness={0.28} roughness={0.4} />
       </mesh>
       <mesh position={[1.72, 0.09, 2.05]}>
         <boxGeometry args={[0.92, 0.18, 0.5]} />
@@ -358,18 +542,29 @@ function NavHouse({ onSelect }) {
         <dodecahedronGeometry args={[0.44, 1]} />
         <meshStandardMaterial color="#78957c" roughness={0.96} />
       </mesh>
+      <group position={[-2.47, 0.5, 1.85]}>
+        <mesh castShadow position={[0, 0.18, 0]}>
+          <boxGeometry args={[0.28, 0.42, 0.22]} />
+          <meshStandardMaterial color="#718286" roughness={0.74} />
+        </mesh>
+        <mesh position={[0, 0.44, 0]} rotation={[0.15, 0, 0]}>
+          <boxGeometry args={[0.3, 0.08, 0.24]} />
+          <meshStandardMaterial color="#c18b65" roughness={0.7} />
+        </mesh>
+      </group>
+      <FlowerPatch x={-1.96} z={1.54} scale={0.75} palette={['#e8c579', '#d79983', '#d5c7e6']} />
     </group>
   );
 }
 
-function Park({ onSelect }) {
+function Park({ onSelect, textures }) {
   const x = 7.1;
   const z = -6.1;
   return (
     <group position={[x, groundHeight(x, z), z]} onClick={(event) => { event.stopPropagation(); onSelect(x, z, 'park'); }}>
       <mesh receiveShadow position={[0, 0.07, 0]}>
         <boxGeometry args={[7.0, 0.12, 5.8]} />
-        <meshStandardMaterial color={colors.grass} roughness={1} />
+        <meshStandardMaterial color={colors.grass} map={textures?.grass} roughness={1} />
       </mesh>
       <mesh position={[0, 0.14, 0]}>
         <boxGeometry args={[5.8, 0.04, 0.5]} />
@@ -390,6 +585,14 @@ function Park({ onSelect }) {
         <boxGeometry args={[1.25, 0.1, 0.18]} />
         <meshStandardMaterial color="#5b6968" roughness={0.65} />
       </mesh>
+      <mesh position={[-0.5, 0.22, 1.62]}>
+        <boxGeometry args={[0.08, 0.5, 0.1]} />
+        <meshStandardMaterial color="#465756" roughness={0.75} />
+      </mesh>
+      <mesh position={[-0.98, 0.22, 1.62]}>
+        <boxGeometry args={[0.08, 0.5, 0.1]} />
+        <meshStandardMaterial color="#465756" roughness={0.75} />
+      </mesh>
       <mesh position={[0.8, 0.1, -0.85]}>
         <cylinderGeometry args={[0.85, 0.85, 0.18, 32]} />
         <meshStandardMaterial color="#a8b0aa" roughness={0.92} />
@@ -402,6 +605,13 @@ function Park({ onSelect }) {
         <cylinderGeometry args={[0.06, 0.08, 0.85, 8]} />
         <meshStandardMaterial color="#b6c1b5" roughness={0.78} />
       </mesh>
+      <mesh position={[0.8, 1.14, -0.85]} scale={[0.18, 0.08, 0.18]}>
+        <sphereGeometry args={[1, 12, 8]} />
+        <meshStandardMaterial color="#f0d89f" emissive="#c58e51" emissiveIntensity={0.18} roughness={0.36} />
+      </mesh>
+      <FlowerPatch x={-2.45} z={0.95} scale={0.92} />
+      <FlowerPatch x={2.42} z={0.62} scale={0.82} palette={['#d7958c', '#e1c377', '#b8c8e6']} />
+      <FlowerPatch x={-1.9} z={-1.68} scale={0.62} palette={['#e8c579', '#ebad8a', '#d5c7e6']} />
     </group>
   );
 }
@@ -447,37 +657,78 @@ function ParkedCar({ x, z, rotation = 0, color = '#788d8b' }) {
   );
 }
 
+function SoftCloud({ x, y, z, scale = 1, opacity = 0.32 }) {
+  return (
+    <group position={[x, y, z]} scale={scale}>
+      <mesh position={[-0.85, 0, 0]}>
+        <sphereGeometry args={[0.68, 20, 12]} />
+        <meshBasicMaterial color="#f1f0df" transparent opacity={opacity} depthWrite={false} />
+      </mesh>
+      <mesh position={[0, 0.27, 0.04]}>
+        <sphereGeometry args={[0.87, 20, 12]} />
+        <meshBasicMaterial color="#f6f1df" transparent opacity={opacity} depthWrite={false} />
+      </mesh>
+      <mesh position={[0.88, 0.08, 0.05]}>
+        <sphereGeometry args={[0.61, 20, 12]} />
+        <meshBasicMaterial color="#f1f0df" transparent opacity={opacity} depthWrite={false} />
+      </mesh>
+    </group>
+  );
+}
+
 function CityWorld({ onSelect }) {
+  const textures = useMemo(() => createCityTextures(), []);
+
+  useEffect(() => () => {
+    Object.values(textures).forEach((texture) => texture.dispose());
+  }, [textures]);
+
   return (
     <group>
+      <SoftCloud x={-12} y={8.2} z={-13} scale={1.36} opacity={0.22} />
+      <SoftCloud x={8.5} y={9.8} z={-11} scale={0.9} opacity={0.18} />
+      <SoftCloud x={12.8} y={7.3} z={8} scale={1.12} opacity={0.16} />
       <mesh position={[0, -0.46, 0]} receiveShadow>
         <boxGeometry args={[32.4, 0.9, 30.8]} />
         <meshStandardMaterial color="#697574" roughness={1} />
       </mesh>
       <mesh position={[0, 0.02, 0]} receiveShadow onClick={(event) => { event.stopPropagation(); onSelect(event.point.x, event.point.z, 'street'); }}>
         <boxGeometry args={[31.5, 0.08, 29.9]} />
-        <meshStandardMaterial color="#a7b09f" roughness={1} />
+        <meshStandardMaterial color="#a7b09f" map={textures.grass} roughness={1} />
       </mesh>
 
       <mesh position={[0, 0.08, 0]} receiveShadow>
         <boxGeometry args={[31.5, 0.08, 5.5]} />
-        <meshStandardMaterial color={colors.asphalt} roughness={0.94} />
+        <meshStandardMaterial color={colors.asphalt} map={textures.asphalt} roughness={0.94} />
       </mesh>
       <mesh position={[0, 0.081, 0]} receiveShadow>
         <boxGeometry args={[5.5, 0.082, 29.9]} />
-        <meshStandardMaterial color={colors.asphalt} roughness={0.94} />
+        <meshStandardMaterial color={colors.asphalt} map={textures.asphalt} roughness={0.94} />
       </mesh>
 
       {[-3.22, 3.22].map((z) => (
         <mesh key={`sidewalk-z-${z}`} position={[0, 0.16, z]} receiveShadow>
           <boxGeometry args={[31.5, 0.12, 0.48]} />
-          <meshStandardMaterial color={colors.concrete} roughness={0.98} />
+          <meshStandardMaterial color={colors.concrete} map={textures.sidewalk} roughness={0.98} />
         </mesh>
       ))}
       {[-3.22, 3.22].map((x) => (
         <mesh key={`sidewalk-x-${x}`} position={[x, 0.16, 0]} receiveShadow>
           <boxGeometry args={[0.48, 0.12, 29.9]} />
-          <meshStandardMaterial color={colors.concrete} roughness={0.98} />
+          <meshStandardMaterial color={colors.concrete} map={textures.sidewalk} roughness={0.98} />
+        </mesh>
+      ))}
+
+      {[-3.52, 3.52].map((z) => (
+        <mesh key={`curb-z-${z}`} position={[0, 0.205, z]}>
+          <boxGeometry args={[31.5, 0.07, 0.09]} />
+          <meshStandardMaterial color={colors.curb} roughness={0.92} />
+        </mesh>
+      ))}
+      {[-3.52, 3.52].map((x) => (
+        <mesh key={`curb-x-${x}`} position={[x, 0.205, 0]}>
+          <boxGeometry args={[0.09, 0.07, 29.9]} />
+          <meshStandardMaterial color={colors.curb} roughness={0.92} />
         </mesh>
       ))}
 
@@ -494,14 +745,31 @@ function CityWorld({ onSelect }) {
         </mesh>
       ))}
 
-      <NavHouse onSelect={onSelect} />
-      <Park onSelect={onSelect} />
-      <LowBuilding x={-9.0} z={-0.15} width={4.6} depth={4.2} height={3.8} color={colors.buildingWarm} warm onSelect={onSelect} variant={1} />
-      <LowBuilding x={7.8} z={4.5} width={5.2} depth={4.1} height={4.7} color={colors.buildingDark} onSelect={onSelect} variant={2} />
-      <LowBuilding x={-7.9} z={5.6} width={5.3} depth={3.7} height={3.15} color="#9fa9a4" onSelect={onSelect} variant={0} />
-      <LowBuilding x={7.7} z={9.3} width={4.0} depth={3.4} height={3.0} color="#b2a998" warm onSelect={onSelect} variant={1} />
-      <LowBuilding x={-7.2} z={10.1} width={4.3} depth={3.0} height={2.65} color="#a7aaa2" onSelect={onSelect} variant={3} />
-      <LowBuilding x={10.9} z={-9.5} width={4.2} depth={3.5} height={3.0} color="#a8b2ad" onSelect={onSelect} variant={2} />
+      {[-1.25, -0.75, -0.25, 0.25, 0.75, 1.25].map((offset) => (
+        <mesh key={`cross-x-${offset}`} position={[offset, 0.15, 1.68]}>
+          <boxGeometry args={[0.22, 0.02, 1.05]} />
+          <meshStandardMaterial color="#e1d8bc" roughness={0.82} />
+        </mesh>
+      ))}
+      {[-1.25, -0.75, -0.25, 0.25, 0.75, 1.25].map((offset) => (
+        <mesh key={`cross-z-${offset}`} position={[1.68, 0.15, offset]}>
+          <boxGeometry args={[1.05, 0.02, 0.22]} />
+          <meshStandardMaterial color="#e1d8bc" roughness={0.82} />
+        </mesh>
+      ))}
+      <mesh position={[-1.55, 0.155, -1.62]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[0.32, 20]} />
+        <meshStandardMaterial color="#434f4f" roughness={0.82} metalness={0.2} />
+      </mesh>
+
+      <NavHouse onSelect={onSelect} textures={textures} />
+      <Park onSelect={onSelect} textures={textures} />
+      <LowBuilding x={-9.0} z={-0.15} width={4.6} depth={4.2} height={3.8} color={colors.buildingWarm} warm onSelect={onSelect} variant={1} textures={textures} />
+      <LowBuilding x={7.8} z={4.5} width={5.2} depth={4.1} height={4.7} color={colors.buildingDark} onSelect={onSelect} variant={2} textures={textures} />
+      <LowBuilding x={-7.9} z={5.6} width={5.3} depth={3.7} height={3.15} color="#9fa9a4" onSelect={onSelect} variant={0} textures={textures} />
+      <LowBuilding x={7.7} z={9.3} width={4.0} depth={3.4} height={3.0} color="#b2a998" warm onSelect={onSelect} variant={1} textures={textures} />
+      <LowBuilding x={-7.2} z={10.1} width={4.3} depth={3.0} height={2.65} color="#a7aaa2" onSelect={onSelect} variant={3} textures={textures} />
+      <LowBuilding x={10.9} z={-9.5} width={4.2} depth={3.5} height={3.0} color="#a8b2ad" onSelect={onSelect} variant={2} textures={textures} />
 
       {TREE_SPOTS.map(([x, z, scale], index) => <StreetTree key={`tree-${index}`} x={x} z={z} scale={scale} onSelect={onSelect} />)}
       <StreetLamp x={-2.5} z={-3.3} />
@@ -1027,6 +1295,13 @@ function createNaverioScarf() {
   tip.position.set(7.2, -5.1, 0);
   tip.castShadow = true;
   group.add(tip);
+  const pendant = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(1.32, 1),
+    new THREE.MeshStandardMaterial({ color: '#f1d28b', emissive: '#a97034', emissiveIntensity: 0.18, roughness: 0.36, metalness: 0.18 }),
+  );
+  pendant.position.set(0.9, -5.15, 3.1);
+  pendant.castShadow = true;
+  group.add(pendant);
   return group;
 }
 
@@ -1041,15 +1316,23 @@ function RiggedFox({ destination, onReady, companion = false }) {
   const bones = useMemo(() => ({
     neck: clonedScene.getObjectByName('b_Neck_04'),
     head: clonedScene.getObjectByName('b_Head_05'),
+    rightArm: clonedScene.getObjectByName('b_RightUpperArm_06'),
+    leftArm: clonedScene.getObjectByName('b_LeftUpperArm_09'),
+    leftLeg: clonedScene.getObjectByName('b_LeftLeg01_015'),
+    rightLeg: clonedScene.getObjectByName('b_RightLeg01_019'),
     tail: clonedScene.getObjectByName('b_Tail01_012'),
   }), [clonedScene]);
   const restRotations = useMemo(() => ({
     neck: bones.neck?.rotation.clone(),
     head: bones.head?.rotation.clone(),
+    rightArm: bones.rightArm?.rotation.clone(),
+    leftArm: bones.leftArm?.rotation.clone(),
+    leftLeg: bones.leftLeg?.rotation.clone(),
+    rightLeg: bones.rightLeg?.rotation.clone(),
     tail: bones.tail?.rotation.clone(),
   }), [bones]);
   const scarf = useMemo(() => (companion ? null : createNaverioScarf()), [companion]);
-  const initial = companion ? { x: 10.2, z: -1.8 } : { x: -1.45, z: -2.15 };
+  const initial = companion ? { x: 10.2, z: -1.8 } : { x: -3.25, z: -1.05 };
   const state = useRef({
     x: initial.x,
     z: initial.z,
@@ -1059,7 +1342,7 @@ function RiggedFox({ destination, onReady, companion = false }) {
     finalZ: initial.z,
     waypoint: false,
     repathAt: 0,
-    radius: companion ? 0.42 : 0.5,
+    radius: companion ? 0.42 : 0.54,
     mode: 'rest',
     modeUntil: companion ? 5.2 : 3.8,
     lastDestination: 0,
@@ -1190,6 +1473,10 @@ function RiggedFox({ destination, onReady, companion = false }) {
     const moving = movingToTarget;
     root.current.position.set(actor.x, groundHeight(actor.x, actor.z) + (companion ? 0.015 : 0.02), actor.z);
     root.current.rotation.y = THREE.MathUtils.lerp(root.current.rotation.y, actor.heading, 0.12);
+    if (modelRoot.current) {
+      const gait = moving ? Math.sin(time * (actor.mode === 'run' ? 10.5 : 6.8) + actor.seed) : Math.sin(time * 1.6 + actor.seed);
+      modelRoot.current.position.y = (moving ? gait * 0.48 : gait * 0.16);
+    }
 
     const clipName = moving ? (actor.mode === 'run' ? 'Run' : 'Walk') : 'Survey';
     const nextAction = actions[clipName] || actions.Survey || Object.values(actions)[0];
@@ -1212,11 +1499,18 @@ function RiggedFox({ destination, onReady, companion = false }) {
     if (bones.tail && restRotations.tail) {
       bones.tail.rotation.z = THREE.MathUtils.lerp(bones.tail.rotation.z, restRotations.tail.z + Math.sin(time * (moving ? 5.5 : 1.7) + actor.seed) * (moving ? 0.12 : 0.06), 0.1);
     }
+    if (!moving && actor.mode === 'observe') {
+      const pawLift = Math.max(0, Math.sin(time * 1.2 + actor.seed)) * 0.12;
+      if (bones.rightArm && restRotations.rightArm) bones.rightArm.rotation.z = THREE.MathUtils.lerp(bones.rightArm.rotation.z, restRotations.rightArm.z - pawLift, 0.08);
+      if (bones.leftArm && restRotations.leftArm) bones.leftArm.rotation.z = THREE.MathUtils.lerp(bones.leftArm.rotation.z, restRotations.leftArm.z + pawLift * 0.46, 0.08);
+      if (bones.leftLeg && restRotations.leftLeg) bones.leftLeg.rotation.x = THREE.MathUtils.lerp(bones.leftLeg.rotation.x, restRotations.leftLeg.x + pawLift * 0.22, 0.08);
+      if (bones.rightLeg && restRotations.rightLeg) bones.rightLeg.rotation.x = THREE.MathUtils.lerp(bones.rightLeg.rotation.x, restRotations.rightLeg.x - pawLift * 0.22, 0.08);
+    }
   });
 
   return (
     <group ref={root}>
-      <group ref={modelRoot} scale={companion ? 0.013 : 0.018} rotation={[0, -Math.PI / 2, 0]}>
+      <group ref={modelRoot} scale={companion ? 0.0135 : 0.0205} rotation={[0, -Math.PI / 2, 0]}>
         <primitive object={clonedScene} />
       </group>
     </group>
