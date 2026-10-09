@@ -501,6 +501,37 @@ function makeTailGeometry() {
   );
 }
 
+function makeStarGeometry() {
+  const shape = new THREE.Shape();
+  for (let index = 0; index < 10; index += 1) {
+    const angle = -Math.PI / 2 + index * (Math.PI / 5);
+    const radius = index % 2 === 0 ? 0.32 : 0.13;
+    const x = Math.cos(angle) * radius;
+    const y = Math.sin(angle) * radius;
+    if (index === 0) shape.moveTo(x, y);
+    else shape.lineTo(x, y);
+  }
+  shape.closePath();
+  const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.05, bevelEnabled: true, bevelSegments: 2, bevelSize: 0.018, bevelThickness: 0.02 });
+  geometry.center();
+  return geometry;
+}
+
+function makeScarfGeometry() {
+  return new THREE.TubeGeometry(
+    new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0, 1.54, 0.2),
+      new THREE.Vector3(0.05, 1.34, 0.38),
+      new THREE.Vector3(0.18, 1.1, 0.44),
+      new THREE.Vector3(0.3, 0.86, 0.42),
+    ]),
+    24,
+    0.065,
+    10,
+    false,
+  );
+}
+
 function setActorGoal(actor, x, z) {
   const target = safeDestination(x, z, actor.radius);
   actor.finalX = target.x;
@@ -535,15 +566,33 @@ function Naverio({ destination }) {
   const body = useRef();
   const face = useRef();
   const tail = useRef();
+  const scarf = useRef();
   const leftFin = useRef();
   const rightFin = useRef();
   const leftFoot = useRef();
   const rightFoot = useRef();
   const leftEye = useRef();
   const rightEye = useRef();
+  const mouth = useRef();
+  const smile = useRef();
   const bodyGeometry = useMemo(() => new THREE.CapsuleGeometry(0.47, 0.72, 8, 20), []);
   const finGeometry = useMemo(() => makeFinGeometry(), []);
   const tailGeometry = useMemo(() => makeTailGeometry(), []);
+  const scarfGeometry = useMemo(() => makeScarfGeometry(), []);
+  const starGeometry = useMemo(() => makeStarGeometry(), []);
+  const smileGeometry = useMemo(() => new THREE.TubeGeometry(
+    new THREE.CatmullRomCurve3([
+      new THREE.Vector3(-0.12, 1.12, 0.7),
+      new THREE.Vector3(-0.06, 1.06, 0.72),
+      new THREE.Vector3(0, 1.05, 0.73),
+      new THREE.Vector3(0.06, 1.06, 0.72),
+      new THREE.Vector3(0.12, 1.12, 0.7),
+    ]),
+    14,
+    0.016,
+    8,
+    false,
+  ), []);
   const state = useRef({
     x: -2.4,
     z: -4.0,
@@ -560,6 +609,9 @@ function Naverio({ destination }) {
     heading: 0,
     nextBlink: 2.6,
     blinkUntil: 0,
+    nextExpression: 5.5,
+    smileUntil: 0,
+    speakUntil: 0,
     seed: Math.random() * 10,
   });
 
@@ -567,7 +619,10 @@ function Naverio({ destination }) {
     bodyGeometry.dispose();
     finGeometry.dispose();
     tailGeometry.dispose();
-  }, [bodyGeometry, finGeometry, tailGeometry]);
+    scarfGeometry.dispose();
+    starGeometry.dispose();
+    smileGeometry.dispose();
+  }, [bodyGeometry, finGeometry, tailGeometry, scarfGeometry, starGeometry, smileGeometry]);
 
   useFrame(({ clock }, delta) => {
     if (!root.current) return;
@@ -585,6 +640,14 @@ function Naverio({ destination }) {
     if (time > actor.nextBlink && actor.blinkUntil < time) {
       actor.blinkUntil = time + 0.16;
       actor.nextBlink = time + 2.6 + Math.random() * 4.5;
+    }
+
+    if (time > actor.nextExpression) {
+      if (Math.random() < 0.72) {
+        actor.smileUntil = time + 2.2 + Math.random() * 2.8;
+        actor.speakUntil = time + 0.5 + Math.random() * 1.8;
+      }
+      actor.nextExpression = time + 7 + Math.random() * 8;
     }
 
     if (time > actor.modeUntil) {
@@ -673,6 +736,7 @@ function Naverio({ destination }) {
       face.current.rotation.x = THREE.MathUtils.lerp(face.current.rotation.x, actor.mode === 'observe' ? -0.05 : actor.mode === 'rest' ? 0.08 : 0, 0.08);
     }
     if (tail.current) tail.current.rotation.z = Math.sin(time * (moving ? 5.5 : 1.5) + actor.seed) * (moving ? 0.1 : 0.045);
+    if (scarf.current) scarf.current.rotation.z = Math.sin(time * (moving ? 5.5 : 1.5) + actor.seed) * (moving ? 0.1 : 0.035);
     if (leftFin.current) leftFin.current.rotation.z = THREE.MathUtils.lerp(leftFin.current.rotation.z, -0.22 + Math.sin(time * 1.9 + actor.seed) * 0.04, 0.1);
     if (rightFin.current) rightFin.current.rotation.z = THREE.MathUtils.lerp(rightFin.current.rotation.z, 0.22 - Math.sin(time * 1.9 + actor.seed) * 0.04, 0.1);
     if (leftFoot.current) leftFoot.current.rotation.x = moving ? Math.sin(cycle) * 0.36 : 0;
@@ -681,6 +745,24 @@ function Naverio({ destination }) {
     const eyeHeight = actor.blinkUntil > time ? 0.08 : actor.mode === 'rest' ? 0.58 : 1;
     if (leftEye.current) leftEye.current.scale.y = THREE.MathUtils.lerp(leftEye.current.scale.y, eyeHeight, 0.5);
     if (rightEye.current) rightEye.current.scale.y = THREE.MathUtils.lerp(rightEye.current.scale.y, eyeHeight, 0.5);
+
+    const glance = Math.sin(time * (actor.mode === 'observe' ? 0.72 : 0.32) + actor.seed) * (actor.mode === 'observe' ? 0.07 : 0.035);
+    const glanceHeight = Math.cos(time * 0.45 + actor.seed) * 0.018;
+    if (leftEye.current) {
+      leftEye.current.position.x = -0.19 + glance;
+      leftEye.current.position.y = 1.31 + glanceHeight;
+    }
+    if (rightEye.current) {
+      rightEye.current.position.x = 0.19 + glance;
+      rightEye.current.position.y = 1.31 + glanceHeight;
+    }
+    if (face.current) face.current.rotation.y = THREE.MathUtils.lerp(face.current.rotation.y, glance * 0.7, 0.08);
+    if (mouth.current) {
+      const talking = actor.speakUntil > time;
+      const opening = talking ? 0.42 + Math.abs(Math.sin(time * 13)) * 0.32 : actor.smileUntil > time ? 0.12 : 0.06;
+      mouth.current.scale.y = THREE.MathUtils.lerp(mouth.current.scale.y, opening, 0.32);
+    }
+    if (smile.current) smile.current.scale.y = THREE.MathUtils.lerp(smile.current.scale.y, actor.smileUntil > time ? 1 : 0.48, 0.16);
   });
 
   return (
@@ -707,6 +789,9 @@ function Naverio({ destination }) {
           <sphereGeometry args={[0.07, 12, 8]} />
           <meshStandardMaterial color="#e0ae62" emissive="#be7632" emissiveIntensity={0.75} roughness={0.35} />
         </mesh>
+        <mesh geometry={starGeometry} position={[0, 0.78, 0.5]} scale={0.22}>
+          <meshStandardMaterial color="#e8bb6c" emissive="#bd7a31" emissiveIntensity={0.24} roughness={0.5} />
+        </mesh>
       </group>
 
       <group ref={leftFoot} position={[-0.27, 0.13, 0.18]}>
@@ -721,6 +806,10 @@ function Naverio({ destination }) {
           <meshStandardMaterial color="#213b42" roughness={0.83} />
         </mesh>
       </group>
+
+      <mesh ref={scarf} geometry={scarfGeometry} castShadow>
+        <meshStandardMaterial color="#d39b68" roughness={0.72} />
+      </mesh>
 
       <group ref={face}>
         <group ref={leftEye} position={[-0.19, 1.31, 0.77]}>
@@ -751,9 +840,12 @@ function Naverio({ destination }) {
             <meshStandardMaterial color="#87c0a8" roughness={0.4} />
           </mesh>
         </group>
-        <mesh position={[0, 1.12, 0.79]} rotation={[0, 0, Math.PI / 2]}>
-          <torusGeometry args={[0.085, 0.016, 6, 14, Math.PI]} />
-          <meshBasicMaterial color="#765b59" />
+        <mesh ref={mouth} position={[0, 1.08, 0.78]} scale={[1, 0.08, 0.34]}>
+          <sphereGeometry args={[0.085, 16, 10]} />
+          <meshStandardMaterial color="#603f45" roughness={0.72} />
+        </mesh>
+        <mesh ref={smile} geometry={smileGeometry}>
+          <meshBasicMaterial color="#754f53" />
         </mesh>
       </group>
 
@@ -765,7 +857,7 @@ function Naverio({ destination }) {
       </mesh>
       <mesh position={[0, 1.82, -0.05]} scale={[0.22, 0.12, 0.15]}>
         <sphereGeometry args={[0.18, 14, 10]} />
-        <meshStandardMaterial color="#769c8d" roughness={0.82} />
+        <meshStandardMaterial color="#304a58" roughness={0.82} />
       </mesh>
     </group>
   );
