@@ -4,7 +4,7 @@ import { ContactShadows, MapControls, Sky, Sparkles } from '@react-three/drei';
 import * as THREE from 'three';
 
 const CITY_LIMIT = 14.9;
-const NAV_CLEARANCE = 0.12;
+const NAV_CLEARANCE = 0.18;
 const NAV_GRID_STEP = 0.5;
 
 const colors = {
@@ -105,7 +105,6 @@ function nearestWalkablePoint(x, z, radius = 0.28) {
 }
 
 function findGridPath(fromX, fromZ, toX, toZ, radius = 0.28) {
-  const min = -CITY_LIMIT + NAV_GRID_STEP;
   const maxIndex = Math.floor((CITY_LIMIT * 2 - NAV_GRID_STEP * 2) / NAV_GRID_STEP);
   const toCell = (value) => THREE.MathUtils.clamp(Math.round((value + CITY_LIMIT - NAV_GRID_STEP) / NAV_GRID_STEP), 0, maxIndex);
   const toPoint = (x, z) => ({
@@ -181,6 +180,9 @@ function findGridPath(fromX, fromZ, toX, toZ, radius = 0.28) {
       const nextZ = current.z + offsetZ;
       if (!walkable(nextX, nextZ)) return;
       if (offsetX && offsetZ && (!walkable(current.x + offsetX, current.z) || !walkable(current.x, current.z + offsetZ))) return;
+      const currentPoint = toPoint(current.x, current.z);
+      const nextPoint = toPoint(nextX, nextZ);
+      if (lineIsBlocked(currentPoint.x, currentPoint.z, nextPoint.x, nextPoint.z, radius)) return;
       const nextKey = key(nextX, nextZ);
       const nextCost = (costs.get(currentKey) ?? Infinity) + travel;
       if (nextCost >= (costs.get(nextKey) ?? Infinity)) return;
