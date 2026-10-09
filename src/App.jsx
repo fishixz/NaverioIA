@@ -1,13 +1,12 @@
 import React,{useEffect,useState} from 'react';
 import World from './World.jsx';
 export default function App(){
- const [progress,setProgress]=useState(0),[opened,setOpened]=useState(false),[menu,setMenu]=useState(false),[mood,setMood]=useState('idle'),[line,setLine]=useState('Que bom que você chegou.');
+ const [progress,setProgress]=useState(0),[opened,setOpened]=useState(false);
  useEffect(()=>{let start=performance.now(),raf=0;const animate=now=>{const elapsed=now-start;setProgress(Math.min(100,Math.round(elapsed/1900*100)));if(elapsed<1900){raf=requestAnimationFrame(animate)}else{setTimeout(()=>setOpened(true),400)}};raf=requestAnimationFrame(animate);return()=>cancelAnimationFrame(raf)},[]);
- function interact(action){setMood(action);setMenu(false);setLine(({hello:'Oi! Seja bem-vindo ao meu mundo.',play:'Hehe! Isso é divertido!',rest:'Vou descansar um pouquinho.',talk:'Ainda estou aprendendo a conversar com você.'})[action]);}
  return <div className="experience">
- <main className={'world-stage '+(opened?'is-open':'')}><World mood={mood} onCharacterClick={()=>setMenu(v=>!v)}/></main>
+ <main className={'world-stage '+(opened?'is-open':'')}><World/></main>
  <div className={'opening-cover '+(opened?'is-open':'')} aria-hidden="true"><div className="cover-top"/><div className="cover-bottom"/></div>
  {!opened&&<div className={'loading '+(progress===100?'finished':'')} role="status" aria-label="Carregando mundo"><div className="loading-symbol">✳</div><div className="loading-name">navério<span>.</span></div><div className="loading-text">{progress===100?'Tudo pronto. Bem-vindo.':'Preparando meu pequeno mundo'}</div><div className="loading-track"><div style={{width:progress+'%'}}/></div><div className="loading-number">{progress}%</div></div>}
- {opened&&<><div className="ambient-top"><div className="ambient-brand">✳ <span>navério</span></div><span className="ambient-state"><i/> NO MEU MUNDO</span></div><div className="drag-tip">☞ Arraste para explorar o ambiente</div><div className="character-chat"><div><strong>Navério</strong><p>{line}</p></div><button aria-label="Interagir com Navério" onClick={()=>setMenu(v=>!v)}>✦</button></div>{menu&&<div className="interaction-menu"><div className="menu-head"><strong>Navério</strong><button onClick={()=>setMenu(false)} aria-label="Fechar">×</button></div><p>O que vamos fazer?</p><div className="menu-actions"><button onClick={()=>interact('hello')}>👋 Cumprimentar</button><button onClick={()=>interact('play')}>✨ Brincar</button><button onClick={()=>interact('rest')}>☁️ Descansar</button><button onClick={()=>interact('talk')}>💬 Conversar</button></div></div>}</>}
+
  </div>
 }
