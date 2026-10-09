@@ -4,6 +4,8 @@ import { ContactShadows, MapControls, Sky, Sparkles } from '@react-three/drei';
 import * as THREE from 'three';
 
 const CITY_LIMIT = 14.9;
+const NAV_CLEARANCE = 0.12;
+const NAV_GRID_STEP = 0.5;
 
 const colors = {
   asphalt: '#505b5b',
@@ -65,13 +67,14 @@ function groundHeight(x, z) {
 }
 
 function isBlocked(x, z, radius = 0.28) {
-  if (Math.abs(x) > CITY_LIMIT - radius || Math.abs(z) > CITY_LIMIT - radius) return true;
+  const paddedRadius = radius + NAV_CLEARANCE;
+  if (Math.abs(x) > CITY_LIMIT - paddedRadius || Math.abs(z) > CITY_LIMIT - paddedRadius) return true;
   return NAV_OBSTACLES.some((obstacle) => {
     if (obstacle.type === 'circle') {
-      return Math.hypot(x - obstacle.x, z - obstacle.z) < obstacle.radius + radius;
+      return Math.hypot(x - obstacle.x, z - obstacle.z) < obstacle.radius + paddedRadius;
     }
-    const halfWidth = obstacle.width / 2 + radius;
-    const halfDepth = obstacle.depth / 2 + radius;
+    const halfWidth = obstacle.width / 2 + paddedRadius;
+    const halfDepth = obstacle.depth / 2 + paddedRadius;
     return Math.abs(x - obstacle.x) < halfWidth && Math.abs(z - obstacle.z) < halfDepth;
   });
 }
@@ -101,44 +104,101 @@ function nearestWalkablePoint(x, z, radius = 0.28) {
   return { x: 0, z: 0 };
 }
 
-function findDetourPoint(fromX, fromZ, toX, toZ, radius = 0.28) {
-  const candidates = [];
-  NAV_OBSTACLES.forEach((obstacle) => {
-    if (obstacle.type === 'circle') {
-      const fromAngle = Math.atan2(fromZ - obstacle.z, fromX - obstacle.x);
-      const toAngle = Math.atan2(toZ - obstacle.z, toX - obstacle.x);
-      const middleAngle = Math.atan2(Math.sin(fromAngle) + Math.sin(toAngle), Math.cos(fromAngle) + Math.cos(toAngle));
-      [middleAngle - 0.82, middleAngle + 0.82, fromAngle + 0.92, fromAngle - 0.92].forEach((angle) => {
-        candidates.push({
-          x: obstacle.x + Math.cos(angle) * (obstacle.radius + radius + 0.35),
-          z: obstacle.z + Math.sin(angle) * (obstacle.radius + radius + 0.35),
-        });
-      });
-      return;
-    }
-    const halfWidth = obstacle.width / 2 + radius + 0.36;
-    const halfDepth = obstacle.depth / 2 + radius + 0.36;
-    [
-      [obstacle.x - halfWidth, obstacle.z - halfDepth],
-      [obstacle.x - halfWidth, obstacle.z + halfDepth],
-      [obstacle.x + halfWidth, obstacle.z - halfDepth],
-      [obstacle.x + halfWidth, obstacle.z + halfDepth],
-      [obstacle.x - halfWidth, obstacle.z],
-      [obstacle.x + halfWidth, obstacle.z],
-      [obstacle.x, obstacle.z - halfDepth],
-      [obstacle.x, obstacle.z + halfDepth],
-    ].forEach(([candidateX, candidateZ]) => candidates.push({ x: candidateX, z: candidateZ }));
+function findGridPath(fromX, fromZ, toX, toZ, radius = 0.28) {
+  const min = -CITY_LIMIT + NAV_GRID_STEP;
+  const maxIndex = Math.floor((CITY_LIMIT * 2 - NAV_GRID_STEP * 2) / NAV_GRID_STEP);
+  const toCell = (value) => THREE.MathUtils.clamp(Math.round((value + CITY_LIMIT - NAV_GRID_STEP) / NAV_GRID_STEP), 0, maxIndex);
+  const toPoint = (x, z) => ({
+    x: -CITY_LIMIT + NAV_GRID_STEP + x * NAV_GRID_STEP,
+    z: -CITY_LIMIT + NAV_GRID_STEP + z * NAV_GRID_STEP,
   });
+  const key = (x, z) => `${x}:${z}`;
+  const startPoint = nearestWalkablePoint(fromX, fromZ, radius);
+  const goalPoint = nearestWalkablePoint(toX, toZ, radius);
+  const start = { x: toCell(startPoint.x), z: toCell(startPoint.z) };
+  const goal = { x: toCell(goalPoint.x), z: toCell(goalPoint.z) };
+  const walkable = (x, z) => {
+    if (x < 0 || z < 0 || x > maxIndex || z > maxIndex) return false;
+    const point = toPoint(x, z);
+    return !isBlocked(point.x, point.z, radius);
+  };
+  const findNearestCell = (cell) => {
+    if (walkable(cell.x, cell.z)) return cell;
+    for (let distance = 1; distance < 10; distance += 1) {
+      for (let x = cell.x - distance; x <= cell.x + distance; x += 1) {
+        for (let z = cell.z - distance; z <= cell.z + distance; z += 1) {
+          if (Math.abs(x - cell.x) !== distance && Math.abs(z - cell.z) !== distance) continue;
+          if (walkable(x, z)) return { x, z };
+        }
+      }
+    }
+    return null;
+  };
+  const safeStart = findNearestCell(start);
+  const safeGoal = findNearestCell(goal);
+  if (!safeStart || !safeGoal) return null;
 
-  return candidates
-    .map((candidate) => nearestWalkablePoint(candidate.x, candidate.z, radius))
-    .filter((candidate, index, all) => all.findIndex((item) => Math.hypot(item.x - candidate.x, item.z - candidate.z) < 0.08) === index)
-    .filter((candidate) => !lineIsBlocked(fromX, fromZ, candidate.x, candidate.z, radius))
-    .sort((first, second) => {
-      const firstCost = Math.hypot(first.x - fromX, first.z - fromZ) + Math.hypot(toX - first.x, toZ - first.z);
-      const secondCost = Math.hypot(second.x - fromX, second.z - fromZ) + Math.hypot(toX - second.x, toZ - second.z);
-      return firstCost - secondCost;
-    })[0] || null;
+  const open = [{ x: safeStart.x, z: safeStart.z, f: 0 }];
+  const openKeys = new Set([key(safeStart.x, safeStart.z)]);
+  const cameFrom = new Map();
+  const costs = new Map([[key(safeStart.x, safeStart.z), 0]]);
+  const neighbors = [
+    [-1, 0, 1], [1, 0, 1], [0, -1, 1], [0, 1, 1],
+    [-1, -1, 1.414], [-1, 1, 1.414], [1, -1, 1.414], [1, 1, 1.414],
+  ];
+  let iterations = 0;
+  const heuristic = (x, z) => Math.hypot(safeGoal.x - x, safeGoal.z - z);
+
+  while (open.length > 0 && iterations < 2600) {
+    iterations += 1;
+    open.sort((first, second) => first.f - second.f);
+    const current = open.shift();
+    const currentKey = key(current.x, current.z);
+    openKeys.delete(currentKey);
+    if (current.x === safeGoal.x && current.z === safeGoal.z) {
+      const cells = [{ x: current.x, z: current.z }];
+      let traceKey = currentKey;
+      while (cameFrom.has(traceKey)) {
+        const previous = cameFrom.get(traceKey);
+        cells.unshift(previous);
+        traceKey = key(previous.x, previous.z);
+      }
+      const points = cells.map((cell) => toPoint(cell.x, cell.z));
+      const simplified = [points[0]];
+      let anchor = 0;
+      for (let index = 2; index < points.length; index += 1) {
+        if (lineIsBlocked(points[anchor].x, points[anchor].z, points[index].x, points[index].z, radius)) {
+          simplified.push(points[index - 1]);
+          anchor = index - 1;
+        }
+      }
+      if (points.length > 1) simplified.push(points[points.length - 1]);
+      return simplified;
+    }
+
+    neighbors.forEach(([offsetX, offsetZ, travel]) => {
+      const nextX = current.x + offsetX;
+      const nextZ = current.z + offsetZ;
+      if (!walkable(nextX, nextZ)) return;
+      if (offsetX && offsetZ && (!walkable(current.x + offsetX, current.z) || !walkable(current.x, current.z + offsetZ))) return;
+      const nextKey = key(nextX, nextZ);
+      const nextCost = (costs.get(currentKey) ?? Infinity) + travel;
+      if (nextCost >= (costs.get(nextKey) ?? Infinity)) return;
+      cameFrom.set(nextKey, { x: current.x, z: current.z });
+      costs.set(nextKey, nextCost);
+      if (!openKeys.has(nextKey)) {
+        open.push({ x: nextX, z: nextZ, f: nextCost + heuristic(nextX, nextZ) });
+        openKeys.add(nextKey);
+      }
+    });
+  }
+  return null;
+}
+
+function findDetourPoint(fromX, fromZ, toX, toZ, radius = 0.28) {
+  const path = findGridPath(fromX, fromZ, toX, toZ, radius);
+  if (!path || path.length < 2) return null;
+  return path[1];
 }
 
 function safeDestination(x, z, radius = 0.28) {
@@ -601,12 +661,12 @@ function Naverio({ destination }) {
     false,
   ), []);
   const state = useRef({
-    x: -2.4,
-    z: -4.0,
-    targetX: -2.4,
-    targetZ: -4.0,
-    finalX: -2.4,
-    finalZ: -4.0,
+    x: -1.45,
+    z: -2.15,
+    targetX: -1.45,
+    targetZ: -2.15,
+    finalX: -1.45,
+    finalZ: -2.15,
     waypoint: false,
     repathAt: 0,
     radius: 0.3,
@@ -619,6 +679,7 @@ function Naverio({ destination }) {
     nextExpression: 5.5,
     smileUntil: 0,
     speakUntil: 0,
+    stuckTime: 0,
     seed: Math.random() * 10,
   });
 
@@ -698,6 +759,7 @@ function Naverio({ destination }) {
       const step = Math.min(distance, speed * dt);
       const moved = tryMove(actor, (dx / distance) * step, (dz / distance) * step);
       if (!moved) {
+        actor.stuckTime += dt;
         const detour = findDetourPoint(actor.x, actor.z, actor.finalX, actor.finalZ, actor.radius);
         if (detour) {
           actor.targetX = detour.x;
@@ -708,6 +770,15 @@ function Naverio({ destination }) {
           actor.mode = 'observe';
           actor.modeUntil = time + 1.6;
         }
+        if (actor.stuckTime > 0.9) {
+          const [escapeX, escapeZ] = SAFE_SPOTS[(Math.floor(time * 3) + Math.floor(actor.seed)) % SAFE_SPOTS.length];
+          setActorGoal(actor, escapeX, escapeZ);
+          actor.mode = 'walk';
+          actor.modeUntil = time + 12;
+          actor.stuckTime = 0;
+        }
+      } else {
+        actor.stuckTime = 0;
       }
       actor.heading = THREE.MathUtils.lerp(actor.heading, Math.atan2(dx, dz), 0.12);
     } else if (actor.mode === 'walk' || actor.mode === 'run') {
@@ -726,7 +797,7 @@ function Naverio({ destination }) {
       actor.heading = Math.atan2(Math.cos(orbit * 1.13), Math.cos(orbit));
     }
 
-    const safe = safeDestination(actor.x, actor.z);
+    const safe = safeDestination(actor.x, actor.z, actor.radius);
     actor.x = safe.x;
     actor.z = safe.z;
     const moving = movingToTarget || actor.mode === 'play';
