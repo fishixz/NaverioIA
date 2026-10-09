@@ -68,6 +68,317 @@ select {
   cursor: grabbing;
 }
 
+.scene-fallback {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  isolation: isolate;
+  background: linear-gradient(180deg, #a7c1bd 0%, #bdd0bd 54%, #708b7b 55%, #5d756b 100%);
+}
+
+.scene-fallback::after {
+  position: absolute;
+  inset: 54% 0 0;
+  z-index: -1;
+  background: linear-gradient(158deg, transparent 0 38%, rgba(45, 57, 56, 0.3) 38.2% 60%, transparent 60.2%), linear-gradient(22deg, transparent 0 39%, rgba(47, 58, 55, 0.24) 39.2% 61%, transparent 61.2%), #617b6d;
+  content: '';
+}
+
+.fallback-sun {
+  position: absolute;
+  top: 10%;
+  right: 12%;
+  width: clamp(54px, 7vw, 92px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #f3d28f;
+  box-shadow: 0 0 50px rgba(243, 210, 143, 0.5);
+}
+
+.fallback-cloud {
+  position: absolute;
+  width: 130px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(233, 241, 228, 0.46);
+  filter: blur(0.4px);
+}
+
+.fallback-cloud::before,
+.fallback-cloud::after {
+  position: absolute;
+  bottom: 5px;
+  border-radius: 50%;
+  background: inherit;
+  content: '';
+}
+
+.fallback-cloud::before {
+  left: 22px;
+  width: 46px;
+  height: 46px;
+}
+
+.fallback-cloud::after {
+  left: 60px;
+  width: 32px;
+  height: 32px;
+}
+
+.fallback-cloud-one {
+  top: 20%;
+  left: 12%;
+  transform: scale(0.75);
+}
+
+.fallback-cloud-two {
+  top: 31%;
+  right: 22%;
+  transform: scale(0.52);
+  opacity: 0.65;
+}
+
+.fallback-horizon {
+  position: absolute;
+  right: -10%;
+  bottom: 38%;
+  left: -10%;
+  height: 20%;
+  border-radius: 50% 50% 0 0;
+  background: #87a58d;
+  transform: rotate(-3deg);
+}
+
+.fallback-road {
+  position: absolute;
+  z-index: 1;
+  background: #596665;
+  box-shadow: inset 0 0 0 2px rgba(221, 215, 183, 0.14);
+}
+
+.fallback-road-main {
+  right: -8%;
+  bottom: 5%;
+  width: 116%;
+  height: 26%;
+  transform: rotate(-7deg);
+}
+
+.fallback-road-side {
+  top: 41%;
+  left: 49%;
+  width: 14%;
+  height: 72%;
+  transform: rotate(19deg);
+  transform-origin: center;
+}
+
+.fallback-building,
+.fallback-house,
+.fallback-tree,
+.fallback-nav {
+  position: absolute;
+  z-index: 2;
+}
+
+.fallback-building {
+  bottom: 44%;
+  width: clamp(90px, 11vw, 165px);
+  height: clamp(125px, 16vw, 230px);
+  border-radius: 7px 7px 2px 2px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.12), transparent 32%), #909b99;
+  box-shadow: 0 20px 28px rgba(35, 51, 51, 0.17);
+}
+
+.fallback-building span {
+  display: block;
+  width: 24%;
+  height: 16%;
+  margin: 12% 9% 0;
+  background: #c8cbb8;
+  box-shadow: 40px 0 #c8cbb8, 80px 0 #c8cbb8;
+  opacity: 0.72;
+}
+
+.fallback-building-left {
+  left: 8%;
+  transform: perspective(500px) rotateY(12deg) rotateZ(-2deg);
+}
+
+.fallback-building-right {
+  right: 10%;
+  height: clamp(115px, 14vw, 205px);
+  background: #a79f91;
+  transform: perspective(500px) rotateY(-11deg) rotateZ(2deg);
+}
+
+.fallback-house {
+  bottom: 43%;
+  left: 38%;
+  width: clamp(115px, 15vw, 210px);
+  height: clamp(82px, 11vw, 150px);
+  border-radius: 4px;
+  background: #b7aa96;
+  box-shadow: 0 17px 23px rgba(35, 51, 51, 0.18);
+}
+
+.fallback-house::before {
+  position: absolute;
+  top: -42%;
+  left: -8%;
+  width: 116%;
+  height: 72%;
+  border-radius: 6px 6px 0 0;
+  background: #526a68;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  content: '';
+}
+
+.fallback-house i,
+.fallback-house b,
+.fallback-house em {
+  position: absolute;
+  display: block;
+  border-radius: 2px;
+  background: #e0c37c;
+  content: '';
+}
+
+.fallback-house i {
+  top: 25%;
+  left: 13%;
+  width: 20%;
+  height: 30%;
+}
+
+.fallback-house b {
+  top: 25%;
+  right: 13%;
+  width: 20%;
+  height: 30%;
+}
+
+.fallback-house em {
+  bottom: 0;
+  left: 42%;
+  width: 17%;
+  height: 46%;
+  background: #6f6258;
+}
+
+.fallback-tree {
+  bottom: 42%;
+  width: clamp(46px, 6vw, 76px);
+  height: clamp(110px, 14vw, 185px);
+}
+
+.fallback-tree i {
+  position: absolute;
+  bottom: 0;
+  left: 43%;
+  width: 14%;
+  height: 47%;
+  background: #806e59;
+}
+
+.fallback-tree b {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  aspect-ratio: 0.86;
+  border-radius: 49% 51% 46% 54%;
+  background: radial-gradient(circle at 35% 28%, #91ad8f 0 12%, transparent 13%), #668475;
+  box-shadow: 18px 10px 0 -3px #769477, -14px 25px 0 -4px #577768;
+}
+
+.fallback-tree-left {
+  left: 20%;
+}
+
+.fallback-tree-right {
+  right: 22%;
+  transform: scale(0.82);
+}
+
+.fallback-nav {
+  bottom: 25%;
+  left: 50%;
+  width: clamp(70px, 9vw, 110px);
+  aspect-ratio: 0.8;
+  border-radius: 46% 54% 44% 56%;
+  background: #6e9c99;
+  box-shadow: 0 20px 18px rgba(27, 49, 49, 0.3);
+  transform: translateX(-50%);
+}
+
+.fallback-nav::before {
+  position: absolute;
+  top: -13%;
+  left: 9%;
+  width: 82%;
+  height: 37%;
+  border-radius: 54% 46% 40% 60%;
+  background: #3d6069;
+  content: '';
+}
+
+.fallback-scarf {
+  position: absolute;
+  top: 26%;
+  left: 15%;
+  width: 70%;
+  height: 12%;
+  border-radius: 50%;
+  background: #dcae69;
+  box-shadow: 18px 19px 0 -6px #dcae69;
+  transform: rotate(-8deg);
+}
+
+.fallback-eye {
+  position: absolute;
+  top: 45%;
+  width: 13%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #273c4b;
+}
+
+.fallback-eye-left { left: 25%; }
+.fallback-eye-right { right: 25%; }
+
+.fallback-mouth {
+  position: absolute;
+  top: 60%;
+  left: 43%;
+  width: 14%;
+  height: 8%;
+  border-radius: 0 0 50% 50%;
+  background: #553c48;
+}
+
+.fallback-star {
+  position: absolute;
+  top: 63%;
+  left: 11%;
+  color: #f2d188;
+  font-size: clamp(15px, 2vw, 24px);
+  text-shadow: 0 0 8px rgba(242, 209, 136, 0.6);
+}
+
+.fallback-note {
+  position: absolute;
+  right: 22px;
+  bottom: 18px;
+  left: 22px;
+  z-index: 5;
+  color: rgba(240, 244, 232, 0.72);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+
 .opening-curtain {
   position: absolute;
   inset: 0;

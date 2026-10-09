@@ -875,6 +875,38 @@ function CameraBounds() {
   return null;
 }
 
+function SceneFallback({ onReady }) {
+  useEffect(() => {
+    onReady?.();
+  }, [onReady]);
+
+  return (
+    <div className="scene-fallback" role="img" aria-label="Prévia visual do bairro de Navério">
+      <div className="fallback-sun" />
+      <div className="fallback-cloud fallback-cloud-one" />
+      <div className="fallback-cloud fallback-cloud-two" />
+      <div className="fallback-horizon" />
+      <div className="fallback-road fallback-road-main" />
+      <div className="fallback-road fallback-road-side" />
+      <div className="fallback-building fallback-building-left">
+        <span /><span /><span />
+      </div>
+      <div className="fallback-building fallback-building-right">
+        <span /><span /><span /><span />
+      </div>
+      <div className="fallback-house">
+        <i />
+        <b />
+        <em />
+      </div>
+      <div className="fallback-tree fallback-tree-left"><i /><b /></div>
+      <div className="fallback-tree fallback-tree-right"><i /><b /></div>
+      <div className="fallback-nav"><span className="fallback-scarf" /><span className="fallback-eye fallback-eye-left" /><span className="fallback-eye fallback-eye-right" /><span className="fallback-mouth" /><span className="fallback-star">✦</span></div>
+      <div className="fallback-note">O bairro continua vivo quando o WebGL estiver disponível.</div>
+    </div>
+  );
+}
+
 export default function World({ onReady }) {
   const [destination, setDestination] = useState(null);
   const destinationId = useRef(0);
@@ -891,6 +923,7 @@ export default function World({ onReady }) {
       dpr={[1, 1.45]}
       camera={{ position: [13.2, 14.8, 17.6], fov: 41, near: 0.1, far: 90 }}
       gl={{ antialias: true, powerPreference: 'high-performance' }}
+      fallback={<SceneFallback onReady={onReady} />}
       onCreated={() => onReady?.()}
     >
       <color attach="background" args={['#9db6b4']} />
